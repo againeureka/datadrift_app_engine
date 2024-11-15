@@ -249,6 +249,27 @@ def export_selected_view():
         print(f"Exporting View: {selected_view}")
         view = dataset.load_saved_view(selected_view)
         view_export_dir = f"./datasets/exported_datasets/{dataset.name}_{selected_view}"
+        label_field = "ground_truth"
+
+        # 전체 샘플을 train, val로 스플릿
+        splits = ['train', 'val']
+        split_ratios = [0.8, 0.2]  # 예시 비율
+        view.shuffle(seed=42)  # 랜덤 시드로 셔플
+
+        # 기존의 train, val, test 태그 삭제 및 새로 추가
+        num_samples = len(view)
+        split_indices = np.cumsum([int(r * num_samples) for r in split_ratios])
+
+        for idx, sample in enumerate(view):
+            # 기존 태그 중 train, val, test 제거
+            sample.tags = [tag for tag in sample.tags if tag not in splits]
+
+            # 새로운 스플릿 태그 추가
+            if idx < split_indices[0]:
+                sample.tags.append('train')
+            elif idx < split_indices[1]:
+                sample.tags.append('val')
+            sample.save()
 
         # 내보내기 포맷 선택
         if selected_format == "YOLOv5Dataset":
@@ -256,11 +277,15 @@ def export_selected_view():
         elif selected_format == "FiftyOneDataset":
             dataset_type = fo.types.FiftyOneDataset
 
-        view.export(
-            export_dir=view_export_dir,
-            dataset_type=dataset_type,
-            name=f"{dataset.name}_{selected_view}",
-        )
+        # 내보내기
+        for split in splits:
+            split_view = view.match_tags(split)
+            split_view.export(
+                export_dir=view_export_dir,
+                dataset_type=dataset_type,
+                label_field=label_field,
+                split=split,
+            )
 
         print(f"Exported to {view_export_dir}")
 
