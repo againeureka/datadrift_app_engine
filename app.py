@@ -6,12 +6,16 @@ import torch
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from flask import Flask, render_template_string, request, redirect, url_for
+from flask import Flask, render_template_string, request, redirect, url_for, Response, send_file
 
 import os
+import sys
 import argparse
 from tqdm import tqdm
 import threading
+import io
+import time
+from trainer import train_yolo
 
 parser = argparse.ArgumentParser()
 
@@ -131,6 +135,39 @@ def initialize_dataset_and_session():
 
 app = Flask(__name__)
 
+## stdout logger class
+class CaptureOutput(io.StringIO):
+    def __init__(self, max_length=100):
+        super().__init__()
+        self.output = []
+        self.max_length = max_length  # 로그를 유지할 최대 줄 수 설정
+        self.auto_clear_threshold = 100  # 자동으로 클리어할 줄 수 설정
+
+    def write(self, txt):
+        super().write(txt)
+        sys.__stdout__.write(txt)  # 터미널에도 출력
+        lines = txt.splitlines()
+        for line in lines:
+            if line:
+                self.output.append(line)
+                # 로그 줄 수가 최대 길이를 초과하면 가장 오래된 로그부터 제거
+                while len(self.output) > self.max_length:
+                    self.output.pop(0)
+                # 로그 줄 수가 자동 클리어 임계값을 초과하면 로그를 초기화
+                if len(self.output) > self.auto_clear_threshold:
+                    self.clear_output()
+
+    def get_output(self):
+        return '\n'.join(self.output)
+
+    def clear_output(self):
+        self.output = []
+
+## logger instance
+capture_stream = CaptureOutput()
+sys.stdout = capture_stream
+
+
 @app.route('/get_views', methods=['GET'])
 def get_views():
     # Fetch the list of saved views
@@ -152,8 +189,9 @@ def home():
         <title>DA Framework Test App</title>
         <style>
             .button-container {{
-                display: flex;
+                display: none; /* save button hidden : if you want to show, change display: flex */
                 justify-content: flex-end;
+                margin-top: 20px;
                 margin-bottom: 20px;
             }}
             .dropdown-container {{
@@ -161,6 +199,7 @@ def home():
                 justify-content: space-between;
                 align-items: center;
                 margin-top: 20px;
+                margin-bottom: 20px;
             }}
             .dropdowns {{
                 display: flex;
@@ -176,6 +215,13 @@ def home():
                 font-size: 20px;
                 padding: 10px;
                 flex-grow: 1;
+            }}
+            .go2trainer-button {{
+                font-size: 24px;
+                padding: 15px 30px;
+                bottom: 20px;
+                left: 20px;
+                margin-top: 40px;
             }}
         </style>
         <script>
@@ -218,25 +264,28 @@ def home():
                 </div>
             </form>
         </div>
+        <form action="/train_page" method="get">
+            <button type="submit" class="go2trainer-button">Train Model</button>
+        </form>
     </body>
     </html>
     """
     return render_template_string(html)
 
-@app.route('/save', methods=['POST'])
-def save_dataset():
-    # 데이터셋 변경사항 저장 및 내보내기
-    print()
-    print("Save Changes of Dataset...")
-    print()
-    # export_dir = args.dataset_dir
-    # dataset.export(
-    #     export_dir=export_dir,
-    #     dataset_type=fo.types.FiftyOneDataset,
-    # )
-    dataset.save()
+# @app.route('/save', methods=['POST'])
+# def save_dataset():
+#     # 데이터셋 변경사항 저장 및 내보내기
+#     print()
+#     print("Save Changes of Dataset...")
+#     print()
+#     # export_dir = args.dataset_dir
+#     # dataset.export(
+#     #     export_dir=export_dir,
+#     #     dataset_type=fo.types.FiftyOneDataset,
+#     # )
+#     dataset.save()
 
-    return redirect(url_for('home'))
+#     return redirect(url_for('home'))
 
 @app.route('/export', methods=['POST'])
 def export_selected_view():
@@ -290,6 +339,167 @@ def export_selected_view():
         print(f"Exported to {view_export_dir}")
 
     return redirect(url_for('home'))
+
+@app.route('/train_page', methods=['GET', 'POST'])
+def train_page():
+    # Exported datasets directory
+    export_dir = './datasets/exported_datasets/'
+    # Models directory
+    models_dir = './models/'
+
+    # 데이터셋과 모델의 경로를 저장
+    datasets = [os.path.join(export_dir, d) for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))]
+    models = [os.path.join(models_dir, m) for m in os.listdir(models_dir) if os.path.isfile(os.path.join(models_dir, m))]
+
+    # HTML template for the train page
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Train Model</title>
+        <style>
+            .train-container {{
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                margin-top: 50px;
+                padding: 0 50px;
+            }}
+            .table-container {{
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                width: 100%;
+            }}
+            .dataset-table, .model-table {{
+                width: 90%;
+                border-collapse: collapse;
+                font-size: 25px;
+            }}
+            .dataset-table th, .dataset-table td, .model-table th, .model-table td {{
+                border: 3px solid #ddd;
+                padding: 20px;
+                text-align: left;
+                vertical-align: middle; /* 수직 중앙 정렬 */
+            }}
+            .dataset-table th, .model-table th {{
+                background-color: #f2f2f2;
+            }}
+            .train-button {{
+                font-size: 24px;
+                padding: 15px 30px;
+                align-self: flex-start;
+            }}
+            .download-button {{
+                font-size: 24px;
+                padding: 15px 30px;
+                margin-top: 20px;
+                background-color: #4CAF50; /* Green */
+                color: white;
+                border: none;
+                cursor: pointer;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                position: absolute;
+                right: 50px;
+            }}
+            input[type="radio"] {{
+                transform: scale(2.0); /* 라디오 버튼 크기 조정 */
+                margin-right: 10px;
+            }}
+            #log {{
+                width: 100%;
+                height: 300px;
+                overflow-y: scroll;
+                border: 1px solid #ddd;
+                padding: 10px;
+                font-family: monospace;
+                background-color: #f9f9f9;
+                margin-top: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="train-container">
+            <form action="/train" method="post" style="flex-grow: 1;">
+                <div class="table-container">
+                    <table class="dataset-table">
+                        <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>Dataset Name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(f'<tr><td><input type="radio" name="selected_dataset" value="{dataset}"></td><td>{os.path.basename(dataset)}</td></tr>' for dataset in datasets)}
+                        </tbody>
+                    </table>
+                    <table class="model-table">
+                        <thead>
+                            <tr>
+                                <th>Select</th>
+                                <th>Model Name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(f'<tr><td><input type="radio" name="selected_model" value="{model}"></td><td>{os.path.basename(model)}</td></tr>' for model in models)}
+                        </tbody>
+                    </table>
+                    <button type="submit" class="train-button">Start Training</button>
+                </div>
+            </form>
+        </div>
+        <div id="log"></div> <!-- 로그 출력 영역 추가 -->
+        <a href="/download_model" class="download-button">Download Model</a> <!-- 다운로드 버튼 추가 -->
+        <script>
+            function fetchLogs() {{
+                const eventSource = new EventSource('/stream_logs');
+                const logElement = document.getElementById('log');
+                eventSource.onmessage = function(event) {{
+                    logElement.innerHTML += event.data + '<br>';
+                    logElement.scrollTop = logElement.scrollHeight;
+                }};
+            }}
+            window.onload = fetchLogs;
+        </script>
+    </body>
+    </html>
+    """
+
+    return render_template_string(html)
+
+@app.route('/train', methods=['POST'])
+def train():
+
+    selected_dataset = request.form.get('selected_dataset') + '/dataset.yaml'
+    selected_model = request.form.get('selected_model')
+    
+    # 별도의 스레드에서 훈련 시작
+    training_thread = threading.Thread(target=train_yolo, args=(selected_dataset, selected_model))
+    training_thread.start()
+    training_thread.join()
+
+    return redirect(url_for('train_page'))
+
+@app.route('/download_model')
+def download_model():
+    model_path = 'runs/train/weights/best.pt'
+    return send_file(model_path, as_attachment=True)
+
+@app.route('/stream_logs')
+def stream_logs():
+    def generate():
+        while True:
+            line = capture_stream.get_output()
+            if line:
+                yield f"data: {line}\n\n"
+                capture_stream.clear_output() # 로그 전송 후 초기화
+            time.sleep(1)  # Add a small delay to prevent high CPU usage
+
+    return Response(generate(), mimetype='text/event-stream')
 
 if __name__ == "__main__":
 
