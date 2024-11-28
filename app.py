@@ -7,6 +7,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from flask import Flask, render_template_string, request, redirect, url_for, Response, send_file
+from flask_socketio import SocketIO, emit
+from flask_cors import CORS
 
 import os
 import sys
@@ -15,8 +17,11 @@ from tqdm import tqdm
 import threading
 import io
 import time
-from trainer import train_yolo
+import subprocess
+import atexit
 
+from trainer import train_yolo
+from utils import TensorboardManager, FiftyoneManager, CaptureOutput
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--dataset_dir", type=str, required=True, help="Importing dataset path")
@@ -27,141 +32,17 @@ parser.add_argument("--dataset_type", type=str, default=None, help="dataset type
 args = parser.parse_args()
 
 # 데이터셋 로드 및 세션 생성은 애플리케이션 시작 시 한 번만 수행
-dataset = None
-fiftyone_thread = None
+tsb_runner = TensorboardManager(port=6006)
+atexit.register(tsb_runner.stop)
 
-# 데이터셋 로드 및 세션 생성
-def initialize_dataset_and_session():
-    global dataset, fiftyone_thread
-
-    # 기존 데이터셋 삭제 (있는 경우)
-    if fo.dataset_exists(args.dataset_name):
-        print(f"Open existing dataset : '{args.dataset_name}'")
-        dataset = fo.load_dataset(args.dataset_name)
-        dataset_type = dataset.tags[0]
-
-    else:
-        if args.dataset_type == "51":
-            dataset_type = "FiftyOneDataset"
-            # 데이터셋 로드
-            dataset = fo.Dataset.from_dir(
-                dataset_dir=args.dataset_dir,
-                dataset_type=fo.types.FiftyOneDataset,
-                name=args.dataset_name,
-            )
-            dataset.tags.append(dataset_type)
-
-        elif args.dataset_type == "yolo":
-            dataset_type = "YOLOv5Dataset"
-            splits = ['train', 'val', 'test']
-            dataset = fo.Dataset(args.dataset_name)
-
-            for split in splits:
-                dataset.add_dir(
-                    dataset_dir=args.dataset_dir,
-                    dataset_type=fo.types.YOLOv5Dataset,
-                    split=split,
-                    tags=split,
-                )
-            dataset.tags.append(dataset_type)
-
-        # 데이터셋을 영구적으로 저장
-        dataset.persistent = True
-        dataset.save()
-
-        # CLIP 모델 로드
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        model, preprocess = clip.load("ViT-B/32", device=device)
-
-        # 임베딩 생성 함수 : 이미지, 텍스트 구분
-        def get_embeddings(sample):
-
-            if "image" in sample.tags:
-                with torch.no_grad():
-                    inputs = preprocess(Image.open(sample.filepath)).unsqueeze(0).to(device)
-                    features = model.encode_image(inputs)
-
-            # elif sample.tags[1] == "text":
-            #     with torch.no_grad():
-            #         inputs = clip.tokenize(sample.original_text, context_length=77, truncate=True).to(device)
-            #         features = model.encode_text(inputs)
-
-            return features.cpu().numpy().flatten()
-        
-        # 이미지 임베딩 추출
-        embeddings = []
-        cnt = 0
-        for sample in dataset:
-            sample.tags.append("image")
-            embedding = get_embeddings(sample)
-            embeddings.append(embedding)
-            cnt += 1
-            if cnt % 50 == 0:
-                print(f"{cnt}개 완료")
-            
-        embeddings = np.array(embeddings)
-
-        # 임베딩을 데이터셋에 추가
-        for sample, embedding in zip(dataset, embeddings):
-            sample['clip_embeddings'] = embedding.tolist()
-            sample.save()
-
-        # 임베딩 시각화
-        results = fob.compute_visualization(
-            dataset,
-            embeddings=embeddings,
-            pathes_field="clip_embeddings",
-            brain_key="clip_embeddings",
-            num_dims=3,
-            plot_points=True,
-            verbose=True,
-        )
-
-    print(f"Loaded dataset '{dataset.name}' with {len(dataset)} samples")
-
-    # FiftyOne 세션 실행
-    def run_fiftyone_session():
-        session = fo.launch_app(dataset, port=args.port)
-        session.wait()
-
-    # 스레드 생성 및 실행
-    fiftyone_thread = threading.Thread(target=run_fiftyone_session)
-    fiftyone_thread.start()
-
-    return dataset_type
-
-# # 애플리케이션 시작 시 데이터셋과 세션 초기화
-# dataset_type = initialize_dataset_and_session()
+ffto_runner = FiftyoneManager(args.dataset_dir, args.dataset_name, args.dataset_type, args.port)
+fiftyone_thread, dataset, dataset_type = ffto_runner.start()
 
 app = Flask(__name__)
+CORS(app)
+socketio = SocketIO(app)
 
-## stdout logger class
-class CaptureOutput(io.StringIO):
-    def __init__(self, max_length=100):
-        super().__init__()
-        self.output = []
-        self.max_length = max_length  # 로그를 유지할 최대 줄 수 설정
-        self.auto_clear_threshold = 100  # 자동으로 클리어할 줄 수 설정
-
-    def write(self, txt):
-        super().write(txt)
-        sys.__stdout__.write(txt)  # 터미널에도 출력
-        lines = txt.splitlines()
-        for line in lines:
-            if line:
-                self.output.append(line)
-                # 로그 줄 수가 최대 길이를 초과하면 가장 오래된 로그부터 제거
-                while len(self.output) > self.max_length:
-                    self.output.pop(0)
-                # 로그 줄 수가 자동 클리어 임계값을 초과하면 로그를 초기화
-                if len(self.output) > self.auto_clear_threshold:
-                    self.clear_output()
-
-    def get_output(self):
-        return '\n'.join(self.output)
-
-    def clear_output(self):
-        self.output = []
+ffto_runner.emit_event(socketio, 'fiftyone_ready', {'status': 'ready'})
 
 ## logger instance
 capture_stream = CaptureOutput()
@@ -184,6 +65,7 @@ def home():
     <!DOCTYPE html>
     <html lang="en">
     <head>
+        <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>DA Framework Test App</title>
@@ -224,25 +106,9 @@ def home():
                 margin-top: 40px;
             }}
         </style>
-        <script>
-            function updateViews() {{
-                fetch('/get_views')
-                    .then(response => response.json())
-                    .then(data => {{
-                        const dropdown = document.getElementById('views');
-                        dropdown.innerHTML = '';
-                        data.views.forEach(view => {{
-                            const option = document.createElement('option');
-                            option.value = view;
-                            option.textContent = view;
-                            dropdown.appendChild(option);
-                        }});
-                    }});
-            }}
-        </script>
     </head>
     <body>
-        <iframe src="http://localhost:{args.port}" width="90%" height="800px" frameborder="0"></iframe>
+        <iframe id="fiftyone-iframe" src="http://localhost:{args.port}" width="90%" height="800px" frameborder="0"></iframe>
         <div class="button-container">
             <form action="/save" method="post">
                 <button type="submit" class="save-button">Save Dataset</button>
@@ -267,6 +133,44 @@ def home():
         <form action="/train_page" method="get">
             <button type="submit" class="go2trainer-button">Train Model</button>
         </form>
+
+        <script>
+            function updateViews() {{
+                fetch('/get_views')
+                    .then(response => response.json())
+                    .then(data => {{
+                        const dropdown = document.getElementById('views');
+                        dropdown.innerHTML = '';
+                        data.views.forEach(view => {{
+                            const option = document.createElement('option');
+                            option.value = view;
+                            option.textContent = view;
+                            dropdown.appendChild(option);
+                        }});
+                    }});
+            }}
+            window.onload = updateViews;
+        </script>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {{
+                const socket = io();
+
+                function checkFiftyOneReady() {{
+                    socket.emit('check_fiftyone_ready');
+                }}
+
+                socket.on('fiftyone_ready', function(data) {{
+                    console.log("Received 'fiftyone_ready' event:", data);
+                    if (data.status === 'ready') {{
+                        const fiftyoneIframe = document.getElementById('fiftyone-iframe');
+                        fiftyoneIframe.src = "http://localhost:{args.port}";
+                    }}
+                }});
+                checkFiftyOneReady();
+            }});
+        </script>
+
     </body>
     </html>
     """
@@ -395,7 +299,6 @@ def train_page():
             .download-button {{
                 font-size: 24px;
                 padding: 15px 30px;
-                margin-top: 20px;
                 background-color: #4CAF50; /* Green */
                 color: white;
                 border: none;
@@ -403,8 +306,13 @@ def train_page():
                 text-align: center;
                 text-decoration: none;
                 display: inline-block;
-                position: absolute;
-                right: 50px;
+            }}
+            .download-button-container {{
+                display: flex;
+                justify-content: flex-end;
+                padding-top: 20px;
+                padding-bottom: 20px;
+
             }}
             input[type="radio"] {{
                 transform: scale(2.0); /* 라디오 버튼 크기 조정 */
@@ -422,6 +330,7 @@ def train_page():
             }}
         </style>
     </head>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
     <body>
         <div class="train-container">
             <form action="/train" method="post" style="flex-grow: 1;">
@@ -452,8 +361,30 @@ def train_page():
                 </div>
             </form>
         </div>
-        <div id="log"></div> <!-- 로그 출력 영역 추가 -->
-        <a href="/download_model" class="download-button">Download Model</a> <!-- 다운로드 버튼 추가 -->
+        <div id="log" style="width: 100%; height: 40px; overflow-y: auto; border: 3px solid #ccc;"></div> <!-- 로그 출력 영역 추가 -->
+        <iframe id="tensorboard-iframe" src="http://localhost:6006" width="100%" height="600px"></iframe>
+        <div class="download-button-container">
+            <a href="/download_model" class="download-button">Download Model</a> <!-- 다운로드 버튼 추가 -->
+        </div>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {{
+                const socket = io();
+
+                socket.on('connect', function() {{
+                    console.log("Socket Connected.");
+                
+                    socket.on('tensorboard_ready', function(data) {{
+                        console.log("Received 'tensorboard_ready' event:", data);
+                        if (data.status === 'ready') {{
+                            const tensorboardIframe = document.getElementById('tensorboard-iframe');
+                            tensorboardIframe.src = "http://localhost:6006";
+                        }}
+                    }});
+                }});
+            }});
+        </script>
+
         <script>
             function fetchLogs() {{
                 const eventSource = new EventSource('/stream_logs');
@@ -476,11 +407,14 @@ def train():
 
     selected_dataset = request.form.get('selected_dataset') + '/dataset.yaml'
     selected_model = request.form.get('selected_model')
-    
+
     # 별도의 스레드에서 훈련 시작
     training_thread = threading.Thread(target=train_yolo, args=(selected_dataset, selected_model))
     training_thread.start()
-    training_thread.join()
+
+    tensorboard_thread = threading.Thread(target=tsb_runner.start)
+    tensorboard_thread.start()
+    tsb_runner.emit_event(socketio, 'tensorboard_ready', {'status': 'ready'})
 
     return redirect(url_for('train_page'))
 
@@ -501,8 +435,15 @@ def stream_logs():
 
     return Response(generate(), mimetype='text/event-stream')
 
+@socketio.on('check_fiftyone_ready')
+def handle_check_fiftyone_ready():
+    # FiftyOne 세션이 준비되었는지 확인하는 로직을 추가하세요.
+    # 예를 들어, 세션이 이미 실행 중이라면 'ready' 상태를 emit합니다.
+    if fiftyone_thread and fiftyone_thread.is_alive():
+        emit('fiftyone_ready', {'status': 'ready'})
+    else:
+        emit('fiftyone_ready', {'status': 'not_ready'})
+
 if __name__ == "__main__":
 
-    dataset_type = initialize_dataset_and_session()
-    app.run(port=5555, debug=False)
-    fiftyone_thread.join()
+    socketio.run(app, port=5555, debug=False)
