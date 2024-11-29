@@ -4,7 +4,6 @@ import clip
 import torch
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
 
 from flask import Flask, render_template_string, request, redirect, url_for, Response, send_file
 from flask_socketio import SocketIO, emit
