@@ -1,5 +1,6 @@
 # ignore yolo logs
 runs/
+tlpdr3/
 
 # ignore model files
 models/
