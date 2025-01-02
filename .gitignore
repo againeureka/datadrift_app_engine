@@ -1,12 +1,15 @@
+# ignore libraries
+deep_text_recognition_benchmark
+
 # ignore yolo logs
 runs/
-tlpdr3/
 
 # ignore model files
 models/
 
 # ignore datasets
 datasets/
+tlpdr3/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

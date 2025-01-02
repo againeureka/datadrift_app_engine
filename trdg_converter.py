@@ -42,9 +42,9 @@ Convert TextRecognitionDataGenerator's result data to Deep-Text-Recognition-Benc
 import os
 import shutil
 import argparse
+import random
 
-
-def run(input_path, output_path):
+def run(input_path, output_path, split_ratio=0.8):
     print('input path: ', os.path.abspath(input_path))
     print('output path: ', os.path.abspath(output_path))
 
@@ -57,34 +57,42 @@ def run(input_path, output_path):
         print('\nSo, delete all data of output folder [%s]\n' % os.path.abspath(output_path))
         shutil.rmtree(output_path)
 
-    image_folder_name = 'images'
-    image_path = os.path.join(output_path, image_folder_name)
-    for path in [output_path, image_path]:
-        os.makedirs(path)
+    # Create train and val directories
+    train_path = os.path.join(output_path, 'train')
+    val_path = os.path.join(output_path, 'val')
+    for path in [train_path, val_path]:
+        os.makedirs(os.path.join(path, 'images'), exist_ok=True)
 
     # Load input data
     files, count = get_files(input_path)
-    digits = len(str(count))
-    print('Total file count: ', count)
+    random.shuffle(files)  # Shuffle files for random split
+    split_index = int(count * split_ratio)
+    train_files = files[:split_index]
+    val_files = files[split_index:]
 
-    # Create gt.txt and copy images
+    # Process train files
+    process_files(train_files, train_path, 'train')
+
+    # Process val files
+    process_files(val_files, val_path, 'val')
+
+    print('\nConversion complete!\n')
+
+def process_files(files, output_path, dataset_type):
+    digits = len(str(len(files)))
     gt_file = open(os.path.join(output_path, 'gt.txt'), 'w', encoding='UTF8')
     for idx, item in enumerate(files):
         if (idx+1) % 100 == 0:
-            print(('\r%{}d / %{}d Processing !!'.format(digits, digits)) % (idx+1, len(files)), end='')
+            print(('\r%{}d / %{}d Processing {} !!'.format(digits, digits, dataset_type)) % (idx+1, len(files)), end='')
 
         gt = os.path.basename(item).split('_')[0]   # remove index
         ext = os.path.splitext(item)[1]
 
-        filename = os.path.join(image_folder_name, ('image_%0{}d'.format(digits) % idx) + ext)
+        filename = os.path.join('images', ('image_%0{}d'.format(digits) % idx) + ext)
         gt_file.write('%s\t%s\n' % (filename, gt))
         shutil.copy(item, os.path.join(output_path, filename))
 
     gt_file.close()
-
-    print('\nConversion complete!\n')
-
-    return
 
 
 def get_files(path):
