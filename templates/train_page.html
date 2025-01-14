@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Train Model</title>
+        <style>
+            .train-container {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                margin-top: 50px;
+                padding: 0 50px;
+            }
+            .table-container {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                width: 100%;
+            }
+            .dataset-table, .model-table {
+                width: 90%;
+                border-collapse: collapse;
+                font-size: 25px;
+            }
+            .dataset-table th, .dataset-table td, .model-table th, .model-table td {
+                border: 3px solid #ddd;
+                padding: 20px;
+                text-align: left;
+                vertical-align: middle; /* 수직 중앙 정렬 */
+            }
+            .dataset-table th, .model-table th {
+                background-color: #f2f2f2;
+            }
+            .train-button {
+                font-size: 24px;
+                padding: 15px 30px;
+                align-self: flex-start;
+            }
+            .download-button {
+                font-size: 24px;
+                padding: 15px 30px;
+                background-color: #4CAF50; /* Green */
+                color: white;
+                border: none;
+                cursor: pointer;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+            }
+            .download-button-container {
+                display: flex;
+                justify-content: flex-end;
+                padding-top: 20px;
+                padding-bottom: 20px;
+
+            }
+            input[type="radio"] {
+                transform: scale(2.0); /* 라디오 버튼 크기 조정 */
+                margin-right: 10px;
+            }
+            #log {
+                width: 100%;
+                height: 300px;
+                overflow-y: scroll;
+                border: 1px solid #ddd;
+                padding: 10px;
+                font-family: monospace;
+                background-color: #f9f9f9;
+                margin-top: 20px;
+            }
+        </style>
+    </head>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <body>
+        <div class="train-container">
+            <form action="/train" method="post" style="flex-grow: 1;">
+                <div class="table-container">
+                    <table class="dataset-table">
+                        <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>Dataset Name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(f'<tr><td><input type="radio" name="selected_dataset" value="{dataset}"></td><td>{os.path.basename(dataset)}</td></tr>' for dataset in datasets)}
+                        </tbody>
+                    </table>
+                    <table class="model-table">
+                        <thead>
+                            <tr>
+                                <th>Select</th>
+                                <th>Model Name</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {''.join(f'<tr><td><input type="radio" name="selected_model" value="{model}"></td><td>{os.path.basename(model)}</td></tr>' for model in models)}
+                        </tbody>
+                    </table>
+                    <button type="submit" class="train-button">Start Training</button>
+                </div>
+            </form>
+        </div>
+        <div id="log" style="width: 100%; height: 40px; overflow-y: auto; border: 3px solid #ccc;"></div> <!-- 로그 출력 영역 추가 -->
+        <iframe id="tensorboard-iframe" src="http://localhost:6006" width="100%" height="600px"></iframe>
+        <div class="download-button-container">
+            <a href="/download_model" class="download-button">Download Model</a> <!-- 다운로드 버튼 추가 -->
+        </div>
+
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {{
+                const socket = io();
+
+                socket.on('connect', function() {{
+                    console.log("Socket Connected.");
+                
+                    socket.on('tensorboard_ready', function(data) {{
+                        console.log("Received 'tensorboard_ready' event:", data);
+                        if (data.status === 'ready') {{
+                            const tensorboardIframe = document.getElementById('tensorboard-iframe');
+                            tensorboardIframe.src = "http://localhost:6006";
+                        }}
+                    }});
+                }});
+            }});
+        </script>
+
+        <script>
+            function fetchLogs() {{
+                const eventSource = new EventSource('/stream_logs');
+                const logElement = document.getElementById('log');
+                eventSource.onmessage = function(event) {{
+                    logElement.innerHTML += event.data + '<br>';
+                    logElement.scrollTop = logElement.scrollHeight;
+                }};
+            }}
+            window.onload = fetchLogs;
+        </script>
+    </body>
+    </html>
