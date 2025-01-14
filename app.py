@@ -61,6 +61,23 @@ def get_views():
 def init_data():
     return render_template('init_data.html')
 
+@app.route('/upload', methods=['POST'])
+def upload_file():
+
+    file_names = []
+
+    for key in request.files:
+        file = request.files[key]
+
+        if file.filename:
+            file_names.append(file.filename)
+            # save file
+            file.save(f'./datasets/downloads/{file.filename}')
+    
+    
+        
+    return f"{file_names}"
+
 @app.route('/dataclinic')
 def home():
     # 데이터셋 뷰 목록 조회
@@ -193,4 +210,4 @@ def handle_check_fiftyone_ready():
 
 if __name__ == "__main__":
 
-    socketio.run(app, port=5555, debug=False)
+    socketio.run(app, port=5555, debug=True)
