@@ -5,7 +5,7 @@ import torch
 
 import numpy as np
 
-from flask import Flask, render_template_string, request, redirect, url_for, Response, send_file
+from flask import Flask, render_template, request, redirect, url_for, Response, send_file
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 
@@ -47,6 +47,9 @@ ffto_runner.emit_event(socketio, 'fiftyone_ready', {'status': 'ready'})
 capture_stream = CaptureOutput()
 sys.stdout = capture_stream
 
+@app.route('/')
+def index():
+    return redirect(url_for('init_data'))
 
 @app.route('/get_views', methods=['GET'])
 def get_views():
@@ -54,126 +57,16 @@ def get_views():
     list_views = dataset.list_saved_views()
     return {'views': list_views}
 
-@app.route('/')
+@app.route('/init_data')
+def init_data():
+    return render_template('init_data.html')
+
+@app.route('/dataclinic')
 def home():
     # 데이터셋 뷰 목록 조회
     list_views = dataset.list_saved_views()
-
-    # HTML template with an iframe
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>DA Framework Test App</title>
-        <style>
-            .button-container {{
-                display: none; /* save button hidden : if you want to show, change display: flex */
-                justify-content: flex-end;
-                margin-top: 20px;
-                margin-bottom: 20px;
-            }}
-            .dropdown-container {{
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-top: 20px;
-                margin-bottom: 20px;
-            }}
-            .dropdowns {{
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                width: 100%;
-            }}
-            .export-button, .save-button {{
-                font-size: 20px;
-                padding: 10px 20px;
-            }}
-            .view-dropdown, .format-dropdown {{
-                font-size: 20px;
-                padding: 10px;
-                flex-grow: 1;
-            }}
-            .go2trainer-button {{
-                font-size: 24px;
-                padding: 15px 30px;
-                bottom: 20px;
-                left: 20px;
-                margin-top: 40px;
-            }}
-        </style>
-    </head>
-    <body>
-        <iframe id="fiftyone-iframe" src="http://localhost:{args.port}" width="90%" height="800px" frameborder="0"></iframe>
-        <div class="button-container">
-            <form action="/save" method="post">
-                <button type="submit" class="save-button">Save Dataset</button>
-            </form>
-        </div>
-        <div class="dropdown-container">
-            <form action="/export" method="post" style="flex-grow: 1;">
-                <div class="dropdowns">
-                    <label for="views">뷰 선택:</label>
-                    <select id="views" name="selected_view" class="view-dropdown">
-                        {''.join(f'<option value="{view}">{view}</option>' for view in list_views)}
-                    </select>
-                    <label for="format">포맷 선택:</label>
-                    <select id="format" name="selected_format" class="format-dropdown">
-                        <option value="FiftyOneDataset">FiftyOneDataset</option>
-                        <option value="YOLOv5Dataset">YOLOv5Dataset</option>
-                    </select>
-                    <button type="submit" class="export-button">Export Dataset</button>
-                </div>
-            </form>
-        </div>
-        <form action="/train_page" method="get">
-            <button type="submit" class="go2trainer-button">Train Model</button>
-        </form>
-
-        <script>
-            function updateViews() {{
-                fetch('/get_views')
-                    .then(response => response.json())
-                    .then(data => {{
-                        const dropdown = document.getElementById('views');
-                        dropdown.innerHTML = '';
-                        data.views.forEach(view => {{
-                            const option = document.createElement('option');
-                            option.value = view;
-                            option.textContent = view;
-                            dropdown.appendChild(option);
-                        }});
-                    }});
-            }}
-            window.onload = updateViews;
-        </script>
-
-        <script>
-            document.addEventListener("DOMContentLoaded", function() {{
-                const socket = io();
-
-                function checkFiftyOneReady() {{
-                    socket.emit('check_fiftyone_ready');
-                }}
-
-                socket.on('fiftyone_ready', function(data) {{
-                    console.log("Received 'fiftyone_ready' event:", data);
-                    if (data.status === 'ready') {{
-                        const fiftyoneIframe = document.getElementById('fiftyone-iframe');
-                        fiftyoneIframe.src = "http://localhost:{args.port}";
-                    }}
-                }});
-                checkFiftyOneReady();
-            }});
-        </script>
-
-    </body>
-    </html>
-    """
-    return render_template_string(html)
+    
+    return render_template('home.html', list_views=list_views, port=args.port)
 
 # @app.route('/save', methods=['POST'])
 # def save_dataset():
@@ -254,152 +147,7 @@ def train_page():
     datasets = [os.path.join(export_dir, d) for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))]
     models = [os.path.join(models_dir, m) for m in os.listdir(models_dir) if os.path.isfile(os.path.join(models_dir, m))]
 
-    # HTML template for the train page
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Train Model</title>
-        <style>
-            .train-container {{
-                display: flex;
-                justify-content: space-between;
-                align-items: flex-start;
-                margin-top: 50px;
-                padding: 0 50px;
-            }}
-            .table-container {{
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                width: 100%;
-            }}
-            .dataset-table, .model-table {{
-                width: 90%;
-                border-collapse: collapse;
-                font-size: 25px;
-            }}
-            .dataset-table th, .dataset-table td, .model-table th, .model-table td {{
-                border: 3px solid #ddd;
-                padding: 20px;
-                text-align: left;
-                vertical-align: middle; /* 수직 중앙 정렬 */
-            }}
-            .dataset-table th, .model-table th {{
-                background-color: #f2f2f2;
-            }}
-            .train-button {{
-                font-size: 24px;
-                padding: 15px 30px;
-                align-self: flex-start;
-            }}
-            .download-button {{
-                font-size: 24px;
-                padding: 15px 30px;
-                background-color: #4CAF50; /* Green */
-                color: white;
-                border: none;
-                cursor: pointer;
-                text-align: center;
-                text-decoration: none;
-                display: inline-block;
-            }}
-            .download-button-container {{
-                display: flex;
-                justify-content: flex-end;
-                padding-top: 20px;
-                padding-bottom: 20px;
-
-            }}
-            input[type="radio"] {{
-                transform: scale(2.0); /* 라디오 버튼 크기 조정 */
-                margin-right: 10px;
-            }}
-            #log {{
-                width: 100%;
-                height: 300px;
-                overflow-y: scroll;
-                border: 1px solid #ddd;
-                padding: 10px;
-                font-family: monospace;
-                background-color: #f9f9f9;
-                margin-top: 20px;
-            }}
-        </style>
-    </head>
-    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
-    <body>
-        <div class="train-container">
-            <form action="/train" method="post" style="flex-grow: 1;">
-                <div class="table-container">
-                    <table class="dataset-table">
-                        <thead>
-                        <tr>
-                            <th>Select</th>
-                            <th>Dataset Name</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {''.join(f'<tr><td><input type="radio" name="selected_dataset" value="{dataset}"></td><td>{os.path.basename(dataset)}</td></tr>' for dataset in datasets)}
-                        </tbody>
-                    </table>
-                    <table class="model-table">
-                        <thead>
-                            <tr>
-                                <th>Select</th>
-                                <th>Model Name</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {''.join(f'<tr><td><input type="radio" name="selected_model" value="{model}"></td><td>{os.path.basename(model)}</td></tr>' for model in models)}
-                        </tbody>
-                    </table>
-                    <button type="submit" class="train-button">Start Training</button>
-                </div>
-            </form>
-        </div>
-        <div id="log" style="width: 100%; height: 40px; overflow-y: auto; border: 3px solid #ccc;"></div> <!-- 로그 출력 영역 추가 -->
-        <iframe id="tensorboard-iframe" src="http://localhost:6006" width="100%" height="600px"></iframe>
-        <div class="download-button-container">
-            <a href="/download_model" class="download-button">Download Model</a> <!-- 다운로드 버튼 추가 -->
-        </div>
-
-        <script>
-            document.addEventListener("DOMContentLoaded", function() {{
-                const socket = io();
-
-                socket.on('connect', function() {{
-                    console.log("Socket Connected.");
-                
-                    socket.on('tensorboard_ready', function(data) {{
-                        console.log("Received 'tensorboard_ready' event:", data);
-                        if (data.status === 'ready') {{
-                            const tensorboardIframe = document.getElementById('tensorboard-iframe');
-                            tensorboardIframe.src = "http://localhost:6006";
-                        }}
-                    }});
-                }});
-            }});
-        </script>
-
-        <script>
-            function fetchLogs() {{
-                const eventSource = new EventSource('/stream_logs');
-                const logElement = document.getElementById('log');
-                eventSource.onmessage = function(event) {{
-                    logElement.innerHTML += event.data + '<br>';
-                    logElement.scrollTop = logElement.scrollHeight;
-                }};
-            }}
-            window.onload = fetchLogs;
-        </script>
-    </body>
-    </html>
-    """
-
-    return render_template_string(html)
+    return render_template('train_page.html', datasets=datasets, models=models)
 
 @app.route('/train', methods=['POST'])
 def train():

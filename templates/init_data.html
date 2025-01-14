@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Initialization</title>
+    <style>
+        .container {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 5px;
+            margin-top: 50px;
+            width: 80%;
+            margin-right: auto;
+        }
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            font-size: 2em;
+        }
+        .upload-status {
+            width: 100%;
+            height: 150px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 2em;
+            color: green;
+            margin-top: 20px;
+        }
+        .error {
+            color: red;
+        }
+        .button-container {
+            display: flex;
+            justify-content: flex-end;
+            width: 100%;
+            margin-top: 50px;
+        }
+        button {
+            font-size: 1.5em;
+            padding: 15px 30px;
+        }
+        input[type="file"] {
+            font-size: 0.7em;
+            padding: 10px;
+        }
+        select {
+            font-size: 0.8em; /* 드롭다운 폰트 크기 증가 */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="upload-section">
+            <label for="ref-upload">Ref:</label>
+            <input type="file" id="ref-upload" name="ref-upload" onchange="handleFileUpload('ref')">
+            <select id="format">
+                <option value="FiftyOneDataset">FiftyOneDataset</option>
+                <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                <option value="RawImageData">RawImageData</option>
+            </select>
+        </div>
+        <div class="upload-section">
+            <label for="cur-upload">Cur:</label>
+            <input type="file" id="cur-upload" name="cur-upload" onchange="handleFileUpload('cur')">
+            <select id="format">
+                <option value="FiftyOneDataset">FiftyOneDataset</option>
+                <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                <option value="RawImageData">RawImageData</option>
+            </select>
+        </div>
+        <div class="upload-section">
+            <label for="test-upload">Test:</label>
+            <input type="file" id="test-upload" name="test-upload" onchange="handleFileUpload('test')">
+            <select id="format">
+                <option value="FiftyOneDataset">FiftyOneDataset</option>
+                <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                <option value="RawImageData">RawImageData</option>
+            </select>
+        </div>
+    </div>
+    <div id="status-log" class="upload-status"></div>
+    <div class="button-container">
+        <button onclick="processAndLoadDataset()">Process & Load Dataset</button>
+    </div>
+
+    <script>
+        function handleFileUpload(type) {
+            const fileInput = document.getElementById(`${type}-upload`);
+            const statusLog = document.getElementById('status-log');
+
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                // Simulate file upload process
+                simulateFileUpload(file)
+                    .then(() => {
+                        const message = `Successfully uploaded: ${file.name}`;
+                        statusLog.innerHTML += `<div>${message}</div>`;
+                        statusLog.scrollTop = statusLog.scrollHeight;
+                    })
+                    .catch(error => {
+                        const message = `Error uploading ${file.name}: ${error}`;
+                        statusLog.innerHTML += `<div class="error">${message}</div>`;
+                        statusLog.scrollTop = statusLog.scrollHeight;
+                    });
+            }
+        }
+
+        function simulateFileUpload(file) {
+            return new Promise((resolve, reject) => {
+                // Simulate a delay for file upload
+                setTimeout(() => {
+                    // Randomly decide if the upload is successful or not
+                    if (Math.random() > 0.2) {
+                        resolve();
+                    } else {
+                        reject('Network error');
+                    }
+                }, 1000);
+            });
+        }
+
+        function processAndLoadDataset() {
+            // Implement the logic to process and load the dataset
+            alert('Processing and loading dataset...');
+        }
+    </script>
+</body>
+</html>

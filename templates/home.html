@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DA Framework Test App</title>
+    <style>
+        :root {
+            --button-font-size: 20px;
+            --button-padding: 10px 20px;
+            --dropdown-font-size: 20px;
+            --dropdown-padding: 10px;
+            --go2trainer-font-size: 24px;
+            --go2trainer-padding: 15px 30px;
+        }
+        .button-container {
+            display: none; /* save button hidden : if you want to show, change display: flex */
+            justify-content: flex-end;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        .dropdown-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        .dropdowns {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+        }
+        .export-button, .save-button {
+            font-size: var(--button-font-size);
+            padding: var(--button-padding);
+        }
+        .view-dropdown, .format-dropdown {
+            font-size: var(--dropdown-font-size);
+            padding: var(--dropdown-padding);
+            flex-grow: 1;
+        }
+        .go2trainer-button {
+            font-size: var(--go2trainer-font-size);
+            padding: var(--go2trainer-padding);
+            bottom: 20px;
+            left: 20px;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <iframe id="fiftyone-iframe" src="http://localhost:{{ port }}" width="90%" height="800px" frameborder="0"></iframe>
+    <div class="button-container">
+        <form action="/save" method="post">
+            <button type="submit" class="save-button">Save Dataset</button>
+        </form>
+    </div>
+    <div class="dropdown-container">
+        <form action="/export" method="post" style="flex-grow: 1;">
+            <div class="dropdowns">
+                <label for="views">뷰 선택:</label>
+                <select id="views" name="selected_view" class="view-dropdown">
+                    {% for view in list_views %}
+                        <option value="{{ view }}">{{ view }}</option>
+                    {% endfor %}
+                </select>
+                <label for="format">포맷 선택:</label>
+                <select id="format" name="selected_format" class="format-dropdown">
+                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                </select>
+                <button type="submit" class="export-button">Export Dataset</button>
+            </div>
+        </form>
+    </div>
+    <form action="/train_page" method="get">
+        <button type="submit" class="go2trainer-button">Train Model</button>
+    </form>
+
+    <script>
+        function updateViews() {
+            fetch('/get_views')
+                .then(response => response.json())
+                .then(data => {
+                    const dropdown = document.getElementById('views');
+                    dropdown.innerHTML = '';
+                    data.views.forEach(view => {
+                        const option = document.createElement('option');
+                        option.value = view;
+                        option.textContent = view;
+                        dropdown.appendChild(option);
+                    });
+                });
+        }
+        window.onload = updateViews;
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const socket = io();
+
+            function checkFiftyOneReady() {
+                socket.emit('check_fiftyone_ready');
+            }
+
+            socket.on('fiftyone_ready', function(data) {
+                console.log("Received 'fiftyone_ready' event:", data);
+                if (data.status === 'ready') {
+                    const fiftyoneIframe = document.getElementById('fiftyone-iframe');
+                    fiftyoneIframe.src = "http://localhost:{{ port }}";
+                }
+            });
+            checkFiftyOneReady();
+        });
+    </script>
+
+</body>
+</html>
