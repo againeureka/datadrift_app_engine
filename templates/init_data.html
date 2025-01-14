@@ -9,10 +9,10 @@
             display: flex;
             flex-direction: row;
             align-items: center;
+            justify-content: space-between;
             gap: 5px;
             margin-top: 50px;
-            width: 80%;
-            margin-right: auto;
+            width: 98%;
         }
         .upload-section {
             display: flex;
@@ -22,12 +22,12 @@
             font-size: 2em;
         }
         .upload-status {
-            width: 100%;
+            width: 98%;
             height: 150px;
             border: 1px solid #ccc;
             padding: 10px;
             overflow-y: auto;
-            font-size: 2em;
+            font-size: 1.3em;
             color: green;
             margin-top: 20px;
         }
@@ -51,44 +51,57 @@
         select {
             font-size: 0.8em; /* 드롭다운 폰트 크기 증가 */
         }
+        form {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            gap: 4px;
+            width: 90%
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="upload-section">
-            <label for="ref-upload">Ref:</label>
-            <input type="file" id="ref-upload" name="ref-upload" onchange="handleFileUpload('ref')">
-            <select id="format">
-                <option value="FiftyOneDataset">FiftyOneDataset</option>
-                <option value="YOLOv5Dataset">YOLOv5Dataset</option>
-                <option value="RawImageData">RawImageData</option>
-            </select>
-        </div>
-        <div class="upload-section">
-            <label for="cur-upload">Cur:</label>
-            <input type="file" id="cur-upload" name="cur-upload" onchange="handleFileUpload('cur')">
-            <select id="format">
-                <option value="FiftyOneDataset">FiftyOneDataset</option>
-                <option value="YOLOv5Dataset">YOLOv5Dataset</option>
-                <option value="RawImageData">RawImageData</option>
-            </select>
-        </div>
-        <div class="upload-section">
-            <label for="test-upload">Test:</label>
-            <input type="file" id="test-upload" name="test-upload" onchange="handleFileUpload('test')">
-            <select id="format">
-                <option value="FiftyOneDataset">FiftyOneDataset</option>
-                <option value="YOLOv5Dataset">YOLOv5Dataset</option>
-                <option value="RawImageData">RawImageData</option>
-            </select>
-        </div>
+        <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+            <div class="upload-section">
+                <label for="ref-upload">Ref:</label>
+                <input type="file" id="ref-upload" name="ref-upload" onchange="handleFileUpload('ref')">
+                <select id="ref-format">
+                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                    <option value="RawImageData">RawImageData</option>
+                </select>
+            </div>
+            <div class="upload-section">
+                <label for="cur-upload">Cur:</label>
+                <input type="file" id="cur-upload" name="cur-upload" onchange="handleFileUpload('cur')">
+                <select id="cur-format">
+                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                    <option value="RawImageData">RawImageData</option>
+                </select>
+            </div>
+            <div class="upload-section">
+                <label for="test-upload">Test:</label>
+                <input type="file" id="test-upload" name="test-upload" onchange="handleFileUpload('test')">
+                <select id="test-format">
+                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                    <option value="RawImageData">RawImageData</option>
+                </select>
+            </div>
+        </form>
     </div>
     <div id="status-log" class="upload-status"></div>
     <div class="button-container">
-        <button onclick="processAndLoadDataset()">Process & Load Dataset</button>
+        <button type="button" onclick="submitForm()">Process & Load Dataset</button>
     </div>
 
     <script>
+        function submitForm() {
+            document.getElementById('upload-form').submit();
+        }
+
         function handleFileUpload(type) {
             const fileInput = document.getElementById(`${type}-upload`);
             const statusLog = document.getElementById('status-log');
@@ -122,11 +135,6 @@
                     }
                 }, 1000);
             });
-        }
-
-        function processAndLoadDataset() {
-            // Implement the logic to process and load the dataset
-            alert('Processing and loading dataset...');
         }
     </script>
 </body>
