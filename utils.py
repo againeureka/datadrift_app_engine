@@ -8,6 +8,7 @@ from PIL import Image
 import clip
 import io
 import sys
+from tqdm import tqdm
 
 ## stdout logger class
 class CaptureOutput(io.StringIO):
@@ -176,6 +177,84 @@ class FiftyoneManager:
         fiftyone_thread.start()
 
         return fiftyone_thread, dataset, dataset_type
+
+
+class InputDataLoader:
+    def __init__(self, file_name, data_type):
+        self.data = file_name
+        self.data_path = f'./datasets/downloads/{file_name}'
+        self.data_type = data_type
+        self.dataset = None
+
+    def get_img_data(self):
+        if self.data_type == "FiftyOneDataset":
+            # 데이터셋 로드
+            self.dataset = fo.Dataset.from_dir(
+                dataset_dir=self.data_path,
+                dataset_type=fo.types.FiftyOneDataset,
+                name=self.data,
+            )
+            self.dataset.tags.append(self.data_type)
+
+        elif self.data_type == "YOLOv5Dataset":
+            splits = ['train', 'val', 'test']
+            self.dataset = fo.Dataset(self.data)
+
+            for split in splits:
+                self.dataset.add_dir(
+                    dataset_dir=self.data_path,
+                    dataset_type=fo.types.YOLOv5Dataset,
+                    split=split,
+                    tags=split,
+                )
+            self.dataset.tags.append(self.data_type)
+        
+        elif self.data_type == "RawImageData":
+            self.dataset = fo.Dataset.from_images_dir(self.data_path)
+            self.dataset.name = self.data
+            self.dataset.tags.append(self.data_type)
+
+        # 데이터셋을 영구적으로 저장
+        self.dataset.persistent = True
+        self.dataset.save()
     
+    # 개별 데이터 태깅, 메타데이터 추가
+    def add_tags(self, source):
+        
+        for sample in self.dataset:
+            sample.tags.append("image")
+            sample['source'] = source
+            sample.save()
+
+    # 임베딩 생성 함수 : 이미지, 텍스트 구분
+    def get_embeddings(self, device, model, preprocess):
+
+        for sample in tqdm(self.dataset, desc=f"{self.dataset.name} 임베딩 계산 중"):
+            if "image" in sample.tags:
+                with torch.no_grad():
+                    inputs = preprocess(Image.open(sample.filepath)).unsqueeze(0).to(device)
+                    embedding = model.encode_image(inputs).cpu().numpy().flatten()
+                    sample['clip_embeddings'] = embedding.tolist()
+                    sample.save()
+
+        # elif sample.tags[1] == "text":
+        #     with torch.no_grad():
+        #         inputs = clip.tokenize(sample.original_text, context_length=77, truncate=True).to(device)
+        #         features = model.encode_text(inputs)
+
+    def collect_image_embeddings_by_sample_id(self):
+
+        image_embeddings = {}
+        for sample in self.dataset:
+            sample_id = sample.id
+            if 'clip_embeddings' in sample:
+                # 샘플 ID를 키로, 이미지 임베딩을 값으로 저장
+                image_embeddings[sample_id] = np.array(sample['clip_embeddings'])
+
+        return image_embeddings
+    
+
+
+
 class LabelingManager:
     pass
