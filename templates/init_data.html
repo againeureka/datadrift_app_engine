@@ -64,38 +64,40 @@
     <div class="container">
         <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
             <div class="upload-section">
-                <label for="ref-upload">Ref:</label>
+                <label for="ref">Ref:</label>
                 <input type="file" id="ref-upload" name="ref-upload" onchange="handleFileUpload('ref')">
-                <select id="ref-format">
-                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                <select id="ref-format" name="ref-format">
                     <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                    <option value="FiftyOneDataset">FiftyOneDataset</option>
                     <option value="RawImageData">RawImageData</option>
                 </select>
             </div>
             <div class="upload-section">
-                <label for="cur-upload">Cur:</label>
+                <label for="cur">Cur:</label>
                 <input type="file" id="cur-upload" name="cur-upload" onchange="handleFileUpload('cur')">
-                <select id="cur-format">
-                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                <select id="cur-format" name="cur-format">
                     <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                    <option value="FiftyOneDataset">FiftyOneDataset</option>
                     <option value="RawImageData">RawImageData</option>
                 </select>
             </div>
             <div class="upload-section">
-                <label for="test-upload">Test:</label>
+                <label for="test">Test:</label>
                 <input type="file" id="test-upload" name="test-upload" onchange="handleFileUpload('test')">
-                <select id="test-format">
-                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                <select id="test-format" name="test-format">
                     <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                    <option value="FiftyOneDataset">FiftyOneDataset</option>
                     <option value="RawImageData">RawImageData</option>
                 </select>
             </div>
-        </form>
     </div>
     <div id="status-log" class="upload-status"></div>
     <div class="button-container">
+        <input type="text" id="merged-dataset-name" name="merged-dataset-name" placeholder="Enter merged dataset name" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">
+        <input type="text" id="port-number" name="port-number" placeholder="Enter FiftyOne port number" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">
         <button type="button" onclick="submitForm()">Process & Load Dataset</button>
     </div>
+        </form>
 
     <script>
         function submitForm() {
