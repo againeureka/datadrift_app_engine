@@ -74,6 +74,17 @@ class FiftyoneManager:
         socketio.emit(event_name, event_data)
         print(f"Emitted '{event_name}' event")
 
+    def collect_image_embeddings_by_sample_id(self):
+
+        image_embeddings = {}
+        for sample in self.dataset:
+            sample_id = sample.id
+            if 'clip_embeddings' in sample:
+                # 샘플 ID를 키로, 이미지 임베딩을 값으로 저장
+                image_embeddings[sample_id] = np.array(sample['clip_embeddings'])
+
+        return image_embeddings
+
     # 데이터셋 로드 및 세션 생성
     def start(self):
         # 기존 데이터셋 삭제 (있는 경우)
@@ -180,13 +191,13 @@ class FiftyoneManager:
 
 
 class InputDataLoader:
-    def __init__(self, file_name, data_type):
-        self.data = file_name
-        self.data_path = f'./datasets/downloads/{file_name}'
+    def __init__(self, data_path, data_type):
+        self.data_path = data_path
+        self.data = data_path.split("/")[-1]
         self.data_type = data_type
         self.dataset = None
 
-    def get_img_data(self):
+    def get_img_data(self, splits = ['train', 'val', 'test']):
         if self.data_type == "FiftyOneDataset":
             # 데이터셋 로드
             self.dataset = fo.Dataset.from_dir(
@@ -197,7 +208,6 @@ class InputDataLoader:
             self.dataset.tags.append(self.data_type)
 
         elif self.data_type == "YOLOv5Dataset":
-            splits = ['train', 'val', 'test']
             self.dataset = fo.Dataset(self.data)
 
             for split in splits:
@@ -214,22 +224,20 @@ class InputDataLoader:
             self.dataset.name = self.data
             self.dataset.tags.append(self.data_type)
 
-        # 데이터셋을 영구적으로 저장
-        self.dataset.persistent = True
-        self.dataset.save()
+        return self.dataset
     
     # 개별 데이터 태깅, 메타데이터 추가
     def add_tags(self, source):
-        
+
         for sample in self.dataset:
             sample.tags.append("image")
             sample['source'] = source
             sample.save()
 
     # 임베딩 생성 함수 : 이미지, 텍스트 구분
-    def get_embeddings(self, device, model, preprocess):
+    def get_embeddings(self, dataset, device, model, preprocess):
 
-        for sample in tqdm(self.dataset, desc=f"{self.dataset.name} 임베딩 계산 중"):
+        for sample in tqdm(dataset, desc=f"{dataset.name} 임베딩 계산 중"):
             if "image" in sample.tags:
                 with torch.no_grad():
                     inputs = preprocess(Image.open(sample.filepath)).unsqueeze(0).to(device)
@@ -241,19 +249,27 @@ class InputDataLoader:
         #     with torch.no_grad():
         #         inputs = clip.tokenize(sample.original_text, context_length=77, truncate=True).to(device)
         #         features = model.encode_text(inputs)
-
-    def collect_image_embeddings_by_sample_id(self):
+    
+    def collect_image_embeddings_by_sample_id(self, dataset):
 
         image_embeddings = {}
-        for sample in self.dataset:
+        for sample in dataset:
             sample_id = sample.id
             if 'clip_embeddings' in sample:
                 # 샘플 ID를 키로, 이미지 임베딩을 값으로 저장
                 image_embeddings[sample_id] = np.array(sample['clip_embeddings'])
 
         return image_embeddings
-    
 
+    def get_dataset_info(self):
+        # 데이터셋의 기본 정보를 JSON 형식으로 반환
+        dataset_info = {
+            "name": self.dataset.name,
+            "num_samples": len(self.dataset),
+            "tags": self.dataset.tags,
+            "sample_fields": list(self.dataset.get_field_schema().keys())
+        }
+        return dataset_info
 
 
 class LabelingManager:
