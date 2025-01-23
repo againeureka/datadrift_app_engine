@@ -62,133 +62,65 @@ class TensorboardManager:
             self.tensorboard_process.wait()\
     
 class FiftyoneManager:
-    def __init__(self, dataset_dir, dataset_name, dataset_type, port):
-        self.dataset = None
+    def __init__(self, port):
         self.fiftyone_thread = None
-        self.dataset_dir = dataset_dir
-        self.dataset_name = dataset_name
-        self.dataset_type = dataset_type
+        self.session = None
         self.port = port
 
     def emit_event(self, socketio, event_name, event_data):
         socketio.emit(event_name, event_data)
         print(f"Emitted '{event_name}' event")
 
-    def collect_image_embeddings_by_sample_id(self):
+    # 데이터셋 로드 및 세션 생성
+    def start(self):
 
+        print(f"Opening FiftyOne Session on port {self.port}")
+        
+        # FiftyOne 세션 실행
+        def run_fiftyone_session():
+
+            self.session = fo.launch_app(port=self.port)
+            self.session.wait()
+
+        # 스레드 생성 및 실행
+        self.fiftyone_thread = threading.Thread(target=run_fiftyone_session)
+        self.fiftyone_thread.start()
+
+        return self.fiftyone_thread
+
+    def set_dataset(self, dataset, vis_results):
+        
+        if self.session:
+            results = vis_results
+            self.session.dataset = dataset
+
+    # 임베딩 생성 함수 : 이미지, 텍스트 구분
+    def get_embeddings(self, dataset, device, model, preprocess):
+
+        for sample in tqdm(dataset, desc=f"{dataset.name} 임베딩 계산 중"):
+            if "image" in sample.tags:
+                with torch.no_grad():
+                    inputs = preprocess(Image.open(sample.filepath)).unsqueeze(0).to(device)
+                    embedding = model.encode_image(inputs).cpu().numpy().flatten()
+                    sample['clip_embeddings'] = embedding.tolist()
+                    sample.save()
+
+        # elif sample.tags[1] == "text":
+        #     with torch.no_grad():
+        #         inputs = clip.tokenize(sample.original_text, context_length=77, truncate=True).to(device)
+        #         features = model.encode_text(inputs)
+    
+    def collect_image_embeddings_by_sample_id(self, dataset):
+
+        print(f"Collecting image embeddings by sample ID for {dataset.name}")
         image_embeddings = {}
-        for sample in self.dataset:
+        for sample in dataset:
             sample_id = sample.id
             if 'clip_embeddings' in sample:
                 # 샘플 ID를 키로, 이미지 임베딩을 값으로 저장
                 image_embeddings[sample_id] = np.array(sample['clip_embeddings'])
 
         return image_embeddings
-
-    # 데이터셋 로드 및 세션 생성
-    def start(self):
-        # 기존 데이터셋 삭제 (있는 경우)
-        if fo.dataset_exists(self.dataset_name):
-            print(f"Open existing dataset : '{self.dataset_name}'")
-            dataset = fo.load_dataset(self.dataset_name)
-            dataset_type = dataset.tags[0]
-
-        else:
-            if dataset_type == "51":
-                dataset_type = "FiftyOneDataset"
-                # 데이터셋 로드
-                dataset = fo.Dataset.from_dir(
-                    dataset_dir=self.dataset_dir,
-                    dataset_type=fo.types.FiftyOneDataset,
-                    name=self.dataset_name,
-                )
-                dataset.tags.append(dataset_type)
-
-            elif dataset_type == "yolo":
-                dataset_type = "YOLOv5Dataset"
-                splits = ['train', 'val', 'test']
-                dataset = fo.Dataset(self.dataset_name)
-
-                for split in splits:
-                    dataset.add_dir(
-                        dataset_dir=self.dataset_dir,
-                        dataset_type=fo.types.YOLOv5Dataset,
-                        split=split,
-                        tags=split,
-                    )
-                dataset.tags.append(dataset_type)
-            
-            elif dataset_type == "raw_image":
-                dataset_type = "RawImageData"
-                dataset = fo.Dataset.from_images_dir(self.dataset_dir)
-                dataset.name = self.dataset_name
-                dataset.tags.append(dataset_type)
-
-            # 데이터셋을 영구적으로 저장
-            dataset.persistent = True
-            dataset.save()
-
-            # CLIP 모델 로드
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            model, preprocess = clip.load("ViT-B/32", device=device)
-
-            # 임베딩 생성 함수 : 이미지, 텍스트 구분
-            def get_embeddings(sample):
-
-                if "image" in sample.tags:
-                    with torch.no_grad():
-                        inputs = preprocess(Image.open(sample.filepath)).unsqueeze(0).to(device)
-                        features = model.encode_image(inputs)
-
-                # elif sample.tags[1] == "text":
-                #     with torch.no_grad():
-                #         inputs = clip.tokenize(sample.original_text, context_length=77, truncate=True).to(device)
-                #         features = model.encode_text(inputs)
-
-                return features.cpu().numpy().flatten()
-            
-            # 이미지 임베딩 추출
-            embeddings = []
-            cnt = 0
-            for sample in dataset:
-                sample.tags.append("image")
-                embedding = get_embeddings(sample)
-                embeddings.append(embedding)
-                cnt += 1
-                if cnt % 50 == 0:
-                    print(f"{cnt}개 완료")
-                
-            embeddings = np.array(embeddings)
-
-            # 임베딩을 데이터셋에 추가
-            for sample, embedding in zip(dataset, embeddings):
-                sample['clip_embeddings'] = embedding.tolist()
-                sample.save()
-
-            # 임베딩 시각화
-            results = fob.compute_visualization(
-                dataset,
-                embeddings=embeddings,
-                pathes_field="clip_embeddings",
-                brain_key="clip_embeddings",
-                # num_dims=3,
-                plot_points=True,
-                verbose=True,
-            )
-
-        print(f"Loaded dataset '{dataset.name}' with {len(dataset)} samples")
-
-        # FiftyOne 세션 실행
-        def run_fiftyone_session():
-            session = fo.launch_app(dataset, port=self.port)
-            session.wait()
-
-        # 스레드 생성 및 실행
-        fiftyone_thread = threading.Thread(target=run_fiftyone_session)
-        fiftyone_thread.start()
-
-        return fiftyone_thread, dataset, dataset_type
-
 
 class InputDataLoader:
     def __init__(self, data_path, data_type):
@@ -233,43 +165,6 @@ class InputDataLoader:
             sample.tags.append("image")
             sample['source'] = source
             sample.save()
-
-    # 임베딩 생성 함수 : 이미지, 텍스트 구분
-    def get_embeddings(self, dataset, device, model, preprocess):
-
-        for sample in tqdm(dataset, desc=f"{dataset.name} 임베딩 계산 중"):
-            if "image" in sample.tags:
-                with torch.no_grad():
-                    inputs = preprocess(Image.open(sample.filepath)).unsqueeze(0).to(device)
-                    embedding = model.encode_image(inputs).cpu().numpy().flatten()
-                    sample['clip_embeddings'] = embedding.tolist()
-                    sample.save()
-
-        # elif sample.tags[1] == "text":
-        #     with torch.no_grad():
-        #         inputs = clip.tokenize(sample.original_text, context_length=77, truncate=True).to(device)
-        #         features = model.encode_text(inputs)
-    
-    def collect_image_embeddings_by_sample_id(self, dataset):
-
-        image_embeddings = {}
-        for sample in dataset:
-            sample_id = sample.id
-            if 'clip_embeddings' in sample:
-                # 샘플 ID를 키로, 이미지 임베딩을 값으로 저장
-                image_embeddings[sample_id] = np.array(sample['clip_embeddings'])
-
-        return image_embeddings
-
-    def get_dataset_info(self):
-        # 데이터셋의 기본 정보를 JSON 형식으로 반환
-        dataset_info = {
-            "name": self.dataset.name,
-            "num_samples": len(self.dataset),
-            "tags": self.dataset.tags,
-            "sample_fields": list(self.dataset.get_field_schema().keys())
-        }
-        return dataset_info
 
 
 class LabelingManager:
