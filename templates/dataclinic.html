@@ -55,7 +55,7 @@
     </style>
 </head>
 <body>
-    <iframe id="fiftyone-iframe" src="http://localhost:{{ port }}" width="90%" height="800px" frameborder="0"></iframe>
+    <iframe id="fiftyone-iframe" src="http://localhost:{{ fiftyone_port_number or 8159 }}" width="90%" height="800px" frameborder="0"></iframe>
     <div class="button-container">
         <form action="/save" method="post">
             <button type="submit" class="save-button">Save Dataset</button>
