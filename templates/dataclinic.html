@@ -88,24 +88,6 @@
     </form>
 
     <script>
-        function updateViews() {
-            fetch('/get_views')
-                .then(response => response.json())
-                .then(data => {
-                    const dropdown = document.getElementById('views');
-                    dropdown.innerHTML = '';
-                    data.views.forEach(view => {
-                        const option = document.createElement('option');
-                        option.value = view;
-                        option.textContent = view;
-                        dropdown.appendChild(option);
-                    });
-                });
-        }
-        window.onload = updateViews;
-    </script>
-
-    <script>
         document.addEventListener("DOMContentLoaded", function() {
             const socket = io();
 

@@ -37,12 +37,18 @@
         .button-container {
             display: flex;
             justify-content: flex-end;
+            gap: 10px;
             width: 100%;
             margin-top: 50px;
         }
+        #saved-datasets {
+            margin-left: auto; /* 드롭다운을 오른쪽으로 이동 */
+            font-size: 1.5em;
+            padding: 10px;
+        }
         button {
             font-size: 1.5em;
-            padding: 15px 30px;
+            padding: 10px;
         }
         input[type="file"] {
             font-size: 0.7em;
@@ -90,16 +96,38 @@
                     <option value="RawImageData">RawImageData</option>
                 </select>
             </div>
-    </div>
-    <div id="status-log" class="upload-status"></div>
-    <div class="button-container">
-        <input type="text" id="merged-dataset-name" name="merged-dataset-name" placeholder="Enter merged dataset name" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">
-        <input type="text" id="port-number" name="port-number" placeholder="Enter FiftyOne port number" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">
-        <button type="button" onclick="submitForm()">Process & Load Dataset</button>
-    </div>
+        </div>
+        <div id="status-log" class="upload-status"></div>
+        <div class="button-container">
+            <input type="text" id="merged-dataset-name" name="merged-dataset-name" placeholder="Enter merged dataset name" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">
+            <button type="button" onclick="submitForm()">Process & Load Dataset</button>
         </form>
+    </div>
+    <div class="button-container">
+        <form id="exist-dataset-form" action="/load_existing_dataset" method="post">
+            <select id="saved-datasets" name="saved-datasets" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">
+                <option value="">Select a saved dataset</option>
+            </select>
+            <button type="submit">Load Existing Dataset</button>
+        </form>
+    </div>
 
     <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/get_existing_datasets')
+                .then(response => response.json())
+                .then(datasets => {
+                    const dropdown = document.getElementById('saved-datasets');
+                    datasets.forEach(dataset => {
+                        const option = document.createElement('option');
+                        option.value = dataset;
+                        option.textContent = dataset;
+                        dropdown.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error fetching datasets:', error));
+        });
+        
         function submitForm() {
             document.getElementById('upload-form').submit();
         }

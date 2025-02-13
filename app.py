@@ -63,15 +63,32 @@ sys.stdout = capture_stream
 def index():
     return redirect(url_for('init_data'))
 
-# @app.route('/get_views', methods=['GET'])
-# def get_views():
-#     # Fetch the list of saved views
-#     list_views = dataset.list_saved_views()
-#     return {'views': list_views}
-
 @app.route('/init_data')
 def init_data():
     return render_template('init_data.html')
+
+@app.route('/get_existing_datasets', methods=['GET'])
+def get_existing_datasets():
+    existing_datasets = fo.list_datasets()
+
+    return jsonify(existing_datasets)
+
+@app.route('/load_existing_dataset', methods=['POST'])
+def load_existing_dataset():
+    dataset_name = request.form.get('saved-datasets')
+    dataset = fo.load_dataset(dataset_name)
+
+    embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(dataset)
+    results = fob.compute_visualization(
+        dataset,
+        embeddings=embeddings_by_sample_id,
+        brain_key="clip_embeddings",
+        plot_points=True,
+        verbose=True,
+    )
+    fom_runner.set_dataset(dataset, results)
+
+    return redirect(url_for('dataclinic', fiftyone_port_number=fom_runner.port))
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -141,7 +158,6 @@ def upload_file():
                 loader.add_tags("test")
 
     merged_dataset_name = request.form.get('merged-dataset-name')
-    fiftyone_port_number = request.form.get('port-number')
 
     # 기존 데이터셋 삭제
     if fo.dataset_exists(merged_dataset_name):
@@ -219,8 +235,8 @@ def export_selected_view():
 
     if selected_view and selected_format:
         print(f"Exporting View: {selected_view}")
-        view = dataset.load_saved_view(selected_view)
-        view_export_dir = f"./datasets/exported_datasets/{dataset.name}_{selected_view}"
+        view = fom_runner.session.dataset.load_saved_view(selected_view)
+        view_export_dir = f"./datasets/exported_datasets/{fom_runner.session.dataset.name}_{selected_view}"
         label_field = "ground_truth"
 
         # 전체 샘플을 train, val로 스플릿
@@ -263,51 +279,52 @@ def export_selected_view():
 
     return redirect(url_for('dataclinic'))
 
-# @app.route('/train_page', methods=['GET', 'POST'])
-# def train_page():
-#     # Exported datasets directory
-#     export_dir = './datasets/exported_datasets/'
-#     # Models directory
-#     models_dir = './models/'
+@app.route('/train_page', methods=['GET', 'POST'])
+def train_page():
+    # Exported datasets directory
+    export_dir = './datasets/exported_datasets/'
+    # Models directory
+    models_dir = './models/'
 
-#     # 데이터셋과 모델의 경로를 저장
-#     datasets = [os.path.join(export_dir, d) for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))]
-#     models = [os.path.join(models_dir, m) for m in os.listdir(models_dir) if os.path.isfile(os.path.join(models_dir, m))]
+    # 데이터셋과 모델의 경로를 저장
+    datasets = [d for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))]
+    models = [m for m in os.listdir(models_dir) if os.path.isfile(os.path.join(models_dir, m))]
 
-#     return render_template('train_page.html', datasets=datasets, models=models)
+    return render_template('train_page.html', datasets=datasets, models=models)
 
-# @app.route('/train', methods=['POST'])
-# def train():
+@app.route('/train', methods=['POST'])
+def train():
 
-#     selected_dataset = request.form.get('selected_dataset') + '/dataset.yaml'
-#     selected_model = request.form.get('selected_model')
+    print("Start Training...")
+    selected_dataset = "datasets/exported_datasets/" + request.form.get('selected_dataset') + '/dataset.yaml'
+    selected_model = "models/" + request.form.get('selected_model')
 
-#     # 별도의 스레드에서 훈련 시작
-#     training_thread = threading.Thread(target=train_yolo, args=(selected_dataset, selected_model))
-#     training_thread.start()
+    # 별도의 스레드에서 훈련 시작
+    training_thread = threading.Thread(target=train_yolo, args=(selected_dataset, selected_model))
+    training_thread.start()
 
-#     tensorboard_thread = threading.Thread(target=tsb_runner.start)
-#     tensorboard_thread.start()
-#     tsb_runner.emit_event(socketio, 'tensorboard_ready', {'status': 'ready'})
+    tensorboard_thread = threading.Thread(target=tsb_runner.start)
+    tensorboard_thread.start()
+    tsb_runner.emit_event(socketio, 'tensorboard_ready', {'status': 'ready'})
 
-#     return redirect(url_for('train_page'))
+    return redirect(url_for('train_page'))
 
-# @app.route('/download_model')
-# def download_model():
-#     model_path = 'runs/train/weights/best.pt'
-#     return send_file(model_path, as_attachment=True)
+@app.route('/download_model')
+def download_model():
+    model_path = 'runs/train/weights/best.pt'
+    return send_file(model_path, as_attachment=True)
 
-# @app.route('/stream_logs')
-# def stream_logs():
-#     def generate():
-#         while True:
-#             line = capture_stream.get_output()
-#             if line:
-#                 yield f"data: {line}\n\n"
-#                 capture_stream.clear_output() # 로그 전송 후 초기화
-#             time.sleep(1)  # Add a small delay to prevent high CPU usage
+@app.route('/stream_logs')
+def stream_logs():
+    def generate():
+        while True:
+            line = capture_stream.get_output()
+            if line:
+                yield f"data: {line}\n\n"
+                capture_stream.clear_output() # 로그 전송 후 초기화
+            time.sleep(1)  # Add a small delay to prevent high CPU usage
 
-#     return Response(generate(), mimetype='text/event-stream')
+    return Response(generate(), mimetype='text/event-stream')
 
 # @socketio.on('check_fiftyone_ready')
 # def handle_check_fiftyone_ready():
