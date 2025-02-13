@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 import sys
 
-def train_yolo(dataset_path, model_path, epochs=10, imgsz=640, batch=4, device="cpu"):
+def train_yolo(dataset_path, model_path, epochs=20, imgsz=640, batch=4, device="cpu"):
     
     print(f"Training started for dataset: {dataset_path} with model: {model_path}")
     
