@@ -12,14 +12,66 @@
             justify-content: space-between;
             gap: 5px;
             margin-top: 50px;
-            width: 98%;
+            margin-left: auto;
+            margin-right: auto;
+            padding: 0 5px;
+            width: 95%;
         }
         .upload-section {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 10px;
-            font-size: 2em;
+            gap: 5px;
+            font-size: 1.8em;
+        }
+        form {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        gap: 4px;
+        width: 100%;
+        }
+        /* 화면 크기에 따른 반응형 스타일 */
+        @media screen and (max-width: 1024px) {
+            .container {
+                gap: 3px;
+                padding: 0 5px;
+            }
+            .upload-section {
+                font-size: 1.4em;
+                gap: 6px;
+            }
+            button, select, input[type="text"] {
+                font-size: 1em !important;
+                padding: 5px !important;
+            }
+            input[type="file"] {
+                font-size: 0.6em;
+                width: 90%;
+            }
+            select {
+                width: 90%;
+            }
+        }
+        @media screen and (max-width: 768px) {
+            .container {
+                gap: 2px;
+            }
+            .upload-section {
+                font-size: 1.1em;
+                gap: 4px;
+            }
+            button, select, input[type="text"] {
+                font-size: 0.9em !important;
+                padding: 3px !important;
+            }
+            input[type="file"] {
+                font-size: 0.5em;
+                width: 85%;
+            }
+            select {
+                width: 85%;
+            }
         }
         .upload-status {
             width: 98%;
@@ -102,7 +154,7 @@
             <input type="text" id="merged-dataset-name" name="merged-dataset-name" placeholder="Enter merged dataset name" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">
             <button type="button" onclick="submitForm()">Process & Load Dataset</button>
         </form>
-    </div>
+        </div>
     <div class="button-container">
         <form id="exist-dataset-form" action="/load_existing_dataset" method="post">
             <select id="saved-datasets" name="saved-datasets" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">

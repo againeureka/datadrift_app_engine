@@ -24,6 +24,7 @@ import json
 from tqdm import tqdm
 import shutil
 import psutil
+import platform
 
 from trainer import train_yolo
 from utils import TensorboardManager, FiftyoneManager, CaptureOutput, InputDataLoader
@@ -92,67 +93,120 @@ def load_existing_dataset():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-
     UPLOAD_FOLDER = './datasets/uploads'
     dataset_infos = {}
 
-    print("Starting file upload process...")  # 디버그 출력
+    print("Starting file upload process...")
     for key in request.files:
         file = request.files[key]
         selected_format = request.form.get(f"{key.split('-')[0]}-format")
-        print(f"Processing file: {file.filename}, Format: {selected_format}")  # 디버그 출력
+        print(f"Processing file: {file.filename}, Format: {selected_format}")
 
-        # if file.filename == '':
-        #     return jsonify({'message': 'No selected file'}), 400
-        
         if file and file.filename.endswith('.zip'):
             zip_path = os.path.join(UPLOAD_FOLDER, file.filename)
             file.save(zip_path)
-            print(f"File saved to: {zip_path}")  # 디버그 출력
+            print(f"File saved to: {zip_path}")
 
-            # Extract the ZIP file
+            # 압축 해제할 디렉토리 경로 (zip 파일명과 동일한 이름)
+            dataset_name = os.path.splitext(file.filename)[0]
+            extract_dir = os.path.join(UPLOAD_FOLDER, dataset_name)
+
             try:
-                if os.path.exists(os.path.splitext(zip_path)[0]):
-                    print(f"Removing existing directory: {os.path.splitext(zip_path)[0]}")
-                    shutil.rmtree(os.path.splitext(zip_path)[0])
-                else:
-                    print(f"No existing directory found: {os.path.splitext(zip_path)[0]}")
+                # 기존 디렉토리와 데이터셋 정리
+                if os.path.exists(extract_dir):
+                    print(f"Removing existing directory: {extract_dir}")
+                    shutil.rmtree(extract_dir)
+                
+                if fo.dataset_exists(dataset_name):
+                    print(f"Removing existing dataset: {dataset_name}")
+                    fo.delete_dataset(dataset_name)
 
-                if fo.dataset_exists(os.path.splitext(file.filename)[0]):
-                    print(f"Removing existing dataset: {os.path.splitext(file.filename)[0]}")
-                    fo.delete_dataset(os.path.splitext(file.filename)[0])
-                else:
-                    print(f"No existing dataset found: {os.path.splitext(file.filename)[0]}")
-
+                # 압축 파일 내용 확인 및 처리
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    for file in tqdm(zip_ref.namelist(), desc="Extracting files"):
-                        zip_ref.extract(file, UPLOAD_FOLDER)
+                    # ZIP 파일 내용 분석
+                    contents = zip_ref.namelist()
+                    
+                    # 존재하는 split 확인
+                    splits = set()
+                    for item in contents:
+                        item_path = os.path.normpath(item)
+                        parts = [p for p in item_path.split(os.sep) if p]
+                        if 'train' in parts:
+                            splits.add('train')
+                        if 'val' in parts:
+                            splits.add('val')
+                        if 'test' in parts:
+                            splits.add('test')
+                    
+                    print(f"Found splits: {splits}")
+                    
+                    # 디렉토리 생성
+                    os.makedirs(extract_dir)
+                    for split in splits:
+                        os.makedirs(os.path.join(extract_dir, 'images', split), exist_ok=True)
+                        os.makedirs(os.path.join(extract_dir, 'labels', split), exist_ok=True)
+                    
+                    # 각 파일 처리
+                    for item in tqdm(contents, desc="Extracting files"):
+                        # 경로 정규화
+                        item_path = os.path.normpath(item)
+                        parts = [p for p in item_path.split(os.sep) if p]
+                        
+                        if not parts:  # 빈 경로 스킵
+                            continue
+                            
+                        # dataset.yaml 파일 처리
+                        if parts[-1] == 'dataset.yaml':
+                            new_path = os.path.join(extract_dir, 'dataset.yaml')
+                            with zip_ref.open(item) as source, open(new_path, 'wb') as target:
+                                shutil.copyfileobj(source, target)
+                            continue
 
-                print(f"Extracted ZIP file: {zip_path}")  # 디버그 출력
+                        # 이미지와 라벨 파일 처리
+                        if len(parts) > 1:
+                            split = None
+                            for s in splits:
+                                if s in parts:
+                                    split = s
+                                    break
+                                    
+                            if split:
+                                if 'images' in parts:
+                                    new_path = os.path.join(extract_dir, 'images', split, parts[-1])
+                                elif 'labels' in parts:
+                                    new_path = os.path.join(extract_dir, 'labels', split, parts[-1])
+                                else:
+                                    continue
 
-            except Exception as e:
-                print(f"Error extracting ZIP file {zip_path}: {e}")
+                                # 파일인 경우에만 복사
+                                if not item.endswith('/'):
+                                    with zip_ref.open(item) as source, open(new_path, 'wb') as target:
+                                        shutil.copyfileobj(source, target)
 
-            # Remove the original ZIP file
-            try:
+                print(f"Extracted ZIP file to: {extract_dir}")
+
+                # ZIP 파일 삭제
                 os.remove(zip_path)
-                print(f"Removed ZIP file: {zip_path}")  # 디버그 출력
+                print(f"Removed ZIP file: {zip_path}")
 
             except Exception as e:
-                print(f"Error removing file {zip_path}: {e}")
+                print(f"Error during ZIP processing: {e}")
+                if os.path.exists(zip_path):
+                    os.remove(zip_path)
+                return jsonify({'error': str(e)}), 500
 
-            data_path = os.path.splitext(zip_path)[0]
-            print(data_path)
+            # 데이터 경로 설정
+            data_path = extract_dir
+            print(f"Data path set to: {data_path}")
+            
             loader = InputDataLoader(data_path, selected_format)
             
             if key == "ref-upload":
                 ref_dataset = loader.get_img_data()
                 loader.add_tags("ref")
-
             elif key == "cur-upload":
                 cur_dataset = loader.get_img_data()
                 loader.add_tags("cur")
-
             elif key == "test-upload":
                 test_dataset = loader.get_img_data()
                 loader.add_tags("test")

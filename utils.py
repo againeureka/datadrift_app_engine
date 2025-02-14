@@ -8,6 +8,7 @@ from PIL import Image
 import clip
 import io
 import sys
+import os
 from tqdm import tqdm
 
 ## stdout logger class
@@ -129,7 +130,8 @@ class InputDataLoader:
         self.data_type = data_type
         self.dataset = None
 
-    def get_img_data(self, splits = ['train', 'val', 'test']):
+    def get_img_data(self):
+        
         if self.data_type == "FiftyOneDataset":
             # 데이터셋 로드
             self.dataset = fo.Dataset.from_dir(
@@ -140,6 +142,12 @@ class InputDataLoader:
             self.dataset.tags.append(self.data_type)
 
         elif self.data_type == "YOLOv5Dataset":
+            # 이미지 디렉토리 내 하위 디렉토리 확인
+            img_dir = os.path.join(self.data_path, "images")
+            splits = [d for d in os.listdir(img_dir) if os.path.isdir(os.path.join(img_dir, d))]
+            splits.sort()  # train, val, test 순서로 정렬
+            print(f"Found splits: {splits}")
+
             self.dataset = fo.Dataset(self.data)
 
             for split in splits:
