@@ -142,21 +142,20 @@ class InputDataLoader:
             self.dataset.tags.append(self.data_type)
 
         elif self.data_type == "YOLOv5Dataset":
-            # 이미지 디렉토리 내 하위 디렉토리 확인
-            img_dir = os.path.join(self.data_path, "images")
-            splits = [d for d in os.listdir(img_dir) if os.path.isdir(os.path.join(img_dir, d))]
-            splits.sort()  # train, val, test 순서로 정렬
-            print(f"Found splits: {splits}")
-
+            splits = ['train', 'val', 'test']
             self.dataset = fo.Dataset(self.data)
 
             for split in splits:
-                self.dataset.add_dir(
-                    dataset_dir=self.data_path,
-                    dataset_type=fo.types.YOLOv5Dataset,
-                    split=split,
-                    tags=split,
-                )
+                try:
+                    self.dataset.add_dir(
+                        dataset_dir=self.data_path,
+                        dataset_type=fo.types.YOLOv5Dataset,
+                        split=split,
+                        tags=split,
+                    )
+                except Exception as e:
+                    print(f"Error adding {split} dataset: {e}")
+                
             self.dataset.tags.append(self.data_type)
         
         elif self.data_type == "RawImageData":
