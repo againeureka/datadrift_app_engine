@@ -94,7 +94,6 @@ def load_existing_dataset():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     UPLOAD_FOLDER = './datasets/uploads'
-    dataset_infos = {}
 
     print("Starting file upload process...")
     for key in request.files:
@@ -125,63 +124,25 @@ def upload_file():
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     # ZIP 파일 내용 분석
                     contents = zip_ref.namelist()
-                    
-                    # 존재하는 split 확인
-                    splits = set()
-                    for item in contents:
-                        item_path = os.path.normpath(item)
-                        parts = [p for p in item_path.split(os.sep) if p]
-                        if 'train' in parts:
-                            splits.add('train')
-                        if 'val' in parts:
-                            splits.add('val')
-                        if 'test' in parts:
-                            splits.add('test')
-                    
-                    print(f"Found splits: {splits}")
-                    
-                    # 디렉토리 생성
-                    os.makedirs(extract_dir)
-                    for split in splits:
-                        os.makedirs(os.path.join(extract_dir, 'images', split), exist_ok=True)
-                        os.makedirs(os.path.join(extract_dir, 'labels', split), exist_ok=True)
-                    
+                    extract_dir = os.path.join(UPLOAD_FOLDER, os.path.splitext(file.filename)[0])
+
                     # 각 파일 처리
                     for item in tqdm(contents, desc="Extracting files"):
                         # 경로 정규화
                         item_path = os.path.normpath(item)
-                        parts = [p for p in item_path.split(os.sep) if p]
-                        
+                        parts = item_path.split(os.sep)
+
                         if not parts:  # 빈 경로 스킵
                             continue
-                            
-                        # dataset.yaml 파일 처리
-                        if parts[-1] == 'dataset.yaml':
-                            new_path = os.path.join(extract_dir, 'dataset.yaml')
+
+                        # 압축 파일의 기존 구조를 유지하여 파일 추출
+                        new_path = os.path.join(UPLOAD_FOLDER, *parts)
+                        if item.endswith('/'):
+                            os.makedirs(new_path, exist_ok=True)
+                        else:
+                            os.makedirs(os.path.dirname(new_path), exist_ok=True)
                             with zip_ref.open(item) as source, open(new_path, 'wb') as target:
                                 shutil.copyfileobj(source, target)
-                            continue
-
-                        # 이미지와 라벨 파일 처리
-                        if len(parts) > 1:
-                            split = None
-                            for s in splits:
-                                if s in parts:
-                                    split = s
-                                    break
-                                    
-                            if split:
-                                if 'images' in parts:
-                                    new_path = os.path.join(extract_dir, 'images', split, parts[-1])
-                                elif 'labels' in parts:
-                                    new_path = os.path.join(extract_dir, 'labels', split, parts[-1])
-                                else:
-                                    continue
-
-                                # 파일인 경우에만 복사
-                                if not item.endswith('/'):
-                                    with zip_ref.open(item) as source, open(new_path, 'wb') as target:
-                                        shutil.copyfileobj(source, target)
 
                 print(f"Extracted ZIP file to: {extract_dir}")
 
@@ -293,9 +254,9 @@ def export_selected_view():
         view_export_dir = f"./datasets/exported_datasets/{fom_runner.session.dataset.name}_{selected_view}"
         label_field = "ground_truth"
 
-        # 전체 샘플을 train, val로 스플릿
-        splits = ['train', 'val']
-        split_ratios = [0.8, 0.2]  # 예시 비율
+        # 전체 샘플을 train, val, test로 스플릿
+        splits = ['train', 'val', 'test']
+        split_ratios = [0.7, 0.2, 0.1]  # 예시 비율
         view.shuffle(seed=42)  # 랜덤 시드로 셔플
 
         # 기존의 train, val, test 태그 삭제 및 새로 추가
@@ -311,6 +272,8 @@ def export_selected_view():
                 sample.tags.append('train')
             elif idx < split_indices[1]:
                 sample.tags.append('val')
+            else:
+                sample.tags.append('test')
             sample.save()
 
         # 내보내기 포맷 선택
