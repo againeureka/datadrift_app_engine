@@ -124,9 +124,9 @@ class FiftyoneManager:
         return image_embeddings
 
 class InputDataLoader:
-    def __init__(self, data_path, data_type):
+    def __init__(self, data_path, data_type, data_name=None):
         self.data_path = data_path
-        self.data = data_path.split("/")[-1]
+        self.data = data_name
         self.data_type = data_type
         self.dataset = None
 

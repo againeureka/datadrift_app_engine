@@ -29,6 +29,26 @@ import platform
 from trainer import train_yolo
 from utils import TensorboardManager, FiftyoneManager, CaptureOutput, InputDataLoader
 
+def is_wsl():
+    # WSL 확인을 위한 여러 방법 시도
+    try:
+        # 1. /proc/version 파일 확인
+        with open('/proc/version', 'r') as f:
+            if 'microsoft' in f.read().lower():
+                return True
+            
+        # 2. WSL 환경 변수 확인
+        if 'WSL_DISTRO_NAME' in os.environ:
+            return True
+            
+        # 3. uname 확인
+        if 'microsoft' in platform.uname().release.lower():
+            return True
+            
+    except:
+        pass
+    return False
+
 def kill_process_on_port(port):
     for proc in psutil.process_iter(['pid', 'name']):
         for conn in proc.connections(kind='inet'):
@@ -102,75 +122,144 @@ def upload_file():
         print(f"Processing file: {file.filename}, Format: {selected_format}")
 
         if file and file.filename.endswith('.zip'):
-            zip_path = os.path.join(UPLOAD_FOLDER, file.filename)
-            file.save(zip_path)
-            print(f"File saved to: {zip_path}")
-
-            # 압축 해제할 디렉토리 경로 (zip 파일명과 동일한 이름)
-            dataset_name = os.path.splitext(file.filename)[0]
-            extract_dir = os.path.join(UPLOAD_FOLDER, dataset_name)
-
             try:
-                # 기존 디렉토리와 데이터셋 정리
-                if os.path.exists(extract_dir):
-                    print(f"Removing existing directory: {extract_dir}")
-                    shutil.rmtree(extract_dir)
+                # uploads 폴더가 없으면 생성
+                if not os.path.exists(UPLOAD_FOLDER):
+                    os.makedirs(UPLOAD_FOLDER)
+
+                # 압축 파일 저장 및 해제
+                zip_path = os.path.join(UPLOAD_FOLDER, file.filename)
+                temp_dir = os.path.join(UPLOAD_FOLDER, 'temp_extract')  # 임시 압축해제 디렉토리
+                data_name = os.path.splitext(file.filename)[0]  # 압축파일명을 데이터셋 이름으로 사용
+                data_dir = os.path.join(UPLOAD_FOLDER, data_name)  # 최종 데이터 디렉토리
                 
-                if fo.dataset_exists(dataset_name):
-                    print(f"Removing existing dataset: {dataset_name}")
-                    fo.delete_dataset(dataset_name)
+                try:
+                    # 임시 디렉토리 정리
+                    if os.path.exists(temp_dir):
+                        shutil.rmtree(temp_dir)
+                    os.makedirs(temp_dir)
 
-                # 압축 파일 내용 확인 및 처리
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    # ZIP 파일 내용 분석
-                    contents = zip_ref.namelist()
-                    extract_dir = os.path.join(UPLOAD_FOLDER, os.path.splitext(file.filename)[0])
+                    # 최종 데이터 디렉토리 생성
+                    if not os.path.exists(data_dir):
+                        os.makedirs(data_dir)
 
-                    # 각 파일 처리
-                    for item in tqdm(contents, desc="Extracting files"):
-                        # 경로 정규화
-                        item_path = os.path.normpath(item)
-                        parts = item_path.split(os.sep)
+                    # 기존 데이터셋 제거
+                    if fo.dataset_exists(data_name):
+                        print(f"Removing existing dataset: {data_name}")
+                        fo.delete_dataset(data_name)
 
-                        if not parts:  # 빈 경로 스킵
-                            continue
+                    # 압축 파일 저장
+                    file.save(zip_path)
+                    print(f"File saved to: {zip_path}")
 
-                        # 압축 파일의 기존 구조를 유지하여 파일 추출
-                        new_path = os.path.join(UPLOAD_FOLDER, *parts)
-                        if item.endswith('/'):
-                            os.makedirs(new_path, exist_ok=True)
-                        else:
-                            os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                            with zip_ref.open(item) as source, open(new_path, 'wb') as target:
-                                shutil.copyfileobj(source, target)
+                    # 임시 디렉토리에 압축 해제
+                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                        contents = zip_ref.namelist()
+                        total_size = sum(zip_ref.getinfo(member).file_size for member in contents)
+                        
+                        with tqdm(total=total_size, unit='B', unit_scale=True, desc=f"Extracting {file.filename}") as pbar:
+                            zip_ref.extractall(temp_dir)
+                            pbar.update(total_size)
 
-                print(f"Extracted ZIP file to: {extract_dir}")
+                    macosx_path = os.path.join(temp_dir, '__MACOSX')
+                    if os.path.exists(macosx_path):
+                        print("Removing __MACOSX directory...")
+                        shutil.rmtree(macosx_path)
 
-                # ZIP 파일 삭제
-                os.remove(zip_path)
-                print(f"Removed ZIP file: {zip_path}")
+                    # 디렉토리 구조 분석 및 파일 이동
+                    def find_dataset_root(start_path):
+                        """데이터셋의 실제 루트 디렉토리를 찾는 함수"""
+                        for root, dirs, files in os.walk(start_path):
+                            if 'images' in dirs and 'labels' in dirs and 'dataset.yaml' in files:
+                                return root
+                            # filename/filename/images 구조 처리
+                            if 'images' in dirs and 'labels' in dirs:
+                                return root
+                        return None
+
+                    dataset_root = find_dataset_root(temp_dir)
+                    if dataset_root:
+                        print(f"Found dataset root at: {dataset_root}")
+                        
+                        # 필요한 파일들을 최종 위치로 이동
+                        for item in os.listdir(dataset_root):
+                            src_path = os.path.join(dataset_root, item)
+                            dst_path = os.path.join(data_dir, item)
+                            
+                            if os.path.exists(dst_path):
+                                if os.path.isdir(dst_path):
+                                    shutil.rmtree(dst_path)
+                                else:
+                                    os.remove(dst_path)
+                            
+                            shutil.move(src_path, dst_path)
+                            print(f"Moved {item} to final location")
+                    else:
+                        raise Exception("Could not find valid dataset structure in the ZIP file")
+
+                    # 임시 디렉토리 삭제
+                    shutil.rmtree(temp_dir)
+                    
+                    # 최종 디렉토리 구조 확인
+                    expected_paths = [
+                        os.path.join(data_dir, 'dataset.yaml'),
+                        os.path.join(data_dir, 'images', 'train'),
+                        os.path.join(data_dir, 'images', 'val'),
+                        os.path.join(data_dir, 'images', 'test'),
+                        os.path.join(data_dir, 'labels', 'train'),
+                        os.path.join(data_dir, 'labels', 'val'),
+                        os.path.join(data_dir, 'labels', 'test')
+                    ]
+                    
+                    for path in expected_paths:
+                        if not os.path.exists(path):
+                            raise Exception(f"Expected path not found: {path}")
+                    
+                    print(f"Directory structure verified successfully")
+
+                    # 데이터셋 로드 - data_name을 데이터셋 이름으로 사용
+                    loader = InputDataLoader(data_dir, selected_format, data_name)
+                    if key == "ref-upload":
+                        ref_dataset = loader.get_img_data()
+                        loader.add_tags("ref")
+                    elif key == "cur-upload":
+                        cur_dataset = loader.get_img_data()
+                        loader.add_tags("cur")
+                    elif key == "test-upload":
+                        test_dataset = loader.get_img_data()
+                        loader.add_tags("test")
+
+                    # 원본 압축 파일 삭제
+                    os.remove(zip_path)
+                    print(f"Successfully processed {file.filename} as dataset '{data_name}'")
+
+                except Exception as e:
+                    print(f"Error during processing {file.filename}: {e}")
+                    # 에러 발생 시 정리
+                    if os.path.exists(data_dir):
+                        shutil.rmtree(data_dir)
+                    if os.path.exists(temp_dir):
+                        shutil.rmtree(temp_dir)
+                    if os.path.exists(zip_path):
+                        os.remove(zip_path)
+                    return jsonify({'error': str(e)}), 500
+
+                print(f"Successfully processed {file.filename} and cleaned up uploads folder")
 
             except Exception as e:
-                print(f"Error during ZIP processing: {e}")
-                if os.path.exists(zip_path):
-                    os.remove(zip_path)
+                print(f"Error during processing {file.filename}: {e}")
+                # 에러 발생 시 uploads 폴더 정리
+                if os.path.exists(UPLOAD_FOLDER):
+                    for item in os.listdir(UPLOAD_FOLDER):
+                        item_path = os.path.join(UPLOAD_FOLDER, item)
+                        try:
+                            if os.path.isfile(item_path):
+                                os.remove(item_path)
+                            elif os.path.isdir(item_path):
+                                shutil.rmtree(item_path)
+                        except:
+                            pass
                 return jsonify({'error': str(e)}), 500
-
-            # 데이터 경로 설정
-            data_path = extract_dir
-            print(f"Data path set to: {data_path}")
-            
-            loader = InputDataLoader(data_path, selected_format)
-            
-            if key == "ref-upload":
-                ref_dataset = loader.get_img_data()
-                loader.add_tags("ref")
-            elif key == "cur-upload":
-                cur_dataset = loader.get_img_data()
-                loader.add_tags("cur")
-            elif key == "test-upload":
-                test_dataset = loader.get_img_data()
-                loader.add_tags("test")
 
     merged_dataset_name = request.form.get('merged-dataset-name')
 
