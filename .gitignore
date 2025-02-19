@@ -8,6 +8,7 @@ deep_text_recognition_benchmark
 **/._.DS_Store
 
 # ignore yolo logs
+**/logs/
 runs/
 
 # ignore model files
