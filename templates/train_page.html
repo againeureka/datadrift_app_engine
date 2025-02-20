@@ -35,10 +35,23 @@
             .dataset-table th, .model-table th {
                 background-color: #f2f2f2;
             }
-            .train-button {
+            .train-button, .tensorboard-button {
                 font-size: 24px;
                 padding: 15px 30px;
-                align-self: flex-start;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: background-color 0.3s;
+                text-decoration: none;
+                text-align: center;
+                margin-top: 20px;
+            }
+            .train-button {
+                background-color: #4CAF50;
+            }
+            .train-button:hover {
+                background-color: #45a049;
             }
             .download-button {
                 font-size: 24px;
@@ -64,15 +77,79 @@
             }
             #log {
                 width: 100%;
-                height: 300px;
-                overflow-x: hidden;
-                overflow-y: scroll;
-                border: 1px solid #ddd;
-                padding: 10px 10px 10px 10px;
-                font-family: monospace;
-                background-color: #f9f9f9;
-                margin-top: 20px;
+                height: 120px;
+                overflow-y: auto;
+                border: 3px solid #ccc;
+                font-size: 14px;
+                line-height: 1.5;
+                margin: 20px 0;
+                padding: 10px;
                 box-sizing: border-box; /* 패딩 포함하여 너비 계산 */
+            }
+            .parameter-container {
+                margin: 20px 0;
+                padding: 20px;
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+
+            .parameter-container h3 {
+                margin-bottom: 20px;
+                color: #333;
+                font-size: 24px;
+            }
+
+            .project-name-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;  /* 두 열로 균등 분할 */
+                gap: 20px;
+                margin-bottom: 20px;  /* 아래 파라미터들과의 간격 */
+            }
+
+            .parameter-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin-top: 10px;  /* project-name-grid와의 간격 */
+            }
+
+            .parameter-item {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .parameter-item label {
+                font-size: 18px;
+                color: #555;
+            }
+
+            .parameter-item input {
+                padding: 8px;
+                font-size: 16px;
+                border: 2px solid #ddd;
+                border-radius: 4px;
+                width: 100%;
+            }
+
+            .parameter-item input:focus {
+                border-color: #4CAF50;
+                outline: none;
+            }
+
+            .button-container {
+                display: flex;
+                gap: 20px;
+                margin-top: 20px;
+            }
+
+            .tensorboard-button {
+                background-color: #2196F3;
+            }
+
+            .tensorboard-button:hover {
+                background-color: #1976D2;
             }
         </style>
     </head>
@@ -113,14 +190,53 @@
                             {% endfor %}
                         </tbody>
                     </table>
-                    <button type="submit" class="train-button">Start Training</button>
+                </div>
+                
+                <!-- 파라미터 설정 섹션 -->
+                <div class="parameter-container">
+                    <h3>Training Parameters</h3>
+                    <!-- Project와 Name을 위한 별도의 grid -->
+                    <div class="project-name-grid">
+                        <div class="parameter-item">
+                            <label for="project">Project Name:</label>
+                            <input type="text" id="project" name="project" value="runs" placeholder="Enter project name">
+                        </div>
+                        <div class="parameter-item">
+                            <label for="name">Run Name:</label>
+                            <input type="text" id="name" name="name" value="exp" placeholder="Enter run name">
+                        </div>
+                    </div>
+                    <!-- 나머지 파라미터를 위한 grid -->
+                    <div class="parameter-grid">
+                        <div class="parameter-item">
+                            <label for="epochs">Epochs:</label>
+                            <input type="number" id="epochs" name="epochs" value="100" min="1" max="1000">
+                        </div>
+                        <div class="parameter-item">
+                            <label for="batch_size">Batch Size:</label>
+                            <input type="number" id="batch_size" name="batch_size" value="16" min="1" max="128">
+                        </div>
+                        <div class="parameter-item">
+                            <label for="img_size">Image Size:</label>
+                            <input type="number" id="img_size" name="img_size" value="640" min="320" max="1280" step="32">
+                        </div>
+                        <div class="parameter-item">
+                            <label for="learning_rate">Learning Rate:</label>
+                            <input type="number" id="learning_rate" name="learning_rate" value="0.001" min="0.0001" max="0.1" step="0.0001">
+                        </div>
+                    </div>
+                </div>
+                <div class="button-container">
+                    <button type="submit" class="train-button">Train Start</button>
+                    <a href="http://localhost:6006" target="_blank" class="tensorboard-button">Train Monitor</a>
                 </div>
             </form>
         </div>
-        <div id="log" style="width: 100%; height: 40px; overflow-y: auto; border: 3px solid #ccc;"></div> <!-- 로그 출력 영역 추가 -->
-        <iframe id="tensorboard-iframe" src="http://localhost:6006" width="100%" height="600px"></iframe>
+
+        
+        <div id="log" style="width: 100%; height: 120px; overflow-y: auto; border: 3px solid #ccc;"></div>
         <div class="download-button-container">
-            <a href="/download_model" class="download-button">Download Model</a> <!-- 다운로드 버튼 추가 -->
+            <a href="/download_model" class="download-button">Model Download</a>
         </div>
 
         <script>
@@ -145,11 +261,44 @@
             function fetchLogs() {
                 const eventSource = new EventSource('/stream_logs');
                 const logElement = document.getElementById('log');
+                const maxMessages = 100; // 최대 메시지 수 설정
+                let messages = [];
+                
+                // 페이지 로드 시 기존 로그 유지
+                let savedLogs = localStorage.getItem('trainingLogs');
+                if (savedLogs) {
+                    messages = savedLogs.split('<br>').filter(msg => msg.trim() !== '');
+                    if (messages.length > maxMessages) {
+                        messages = messages.slice(-maxMessages);
+                    }
+                    logElement.innerHTML = messages.join('<br>');
+                }
+                
                 eventSource.onmessage = function(event) {
-                    logElement.innerHTML += event.data + '<br>';
+                    // 새 메시지 추가
+                    messages.push(event.data);
+                    
+                    // 최대 메시지 수를 초과하면 오래된 메시지 제거
+                    if (messages.length > maxMessages) {
+                        messages = messages.slice(-maxMessages);
+                    }
+                    
+                    // 화면 업데이트
+                    logElement.innerHTML = messages.join('<br>');
+                    
+                    // localStorage 업데이트
+                    localStorage.setItem('trainingLogs', messages.join('<br>'));
+                    
+                    // 스크롤을 항상 아래로 유지
                     logElement.scrollTop = logElement.scrollHeight;
                 };
+                
+                eventSource.onerror = function(error) {
+                    console.error('EventSource failed:', error);
+                    eventSource.close();
+                };
             }
+            
             window.onload = fetchLogs;
         </script>
     </body>

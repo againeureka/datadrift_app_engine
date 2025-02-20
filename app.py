@@ -400,16 +400,41 @@ def train_page():
 
 @app.route('/train', methods=['POST'])
 def train():
-
-    print("Start Training...")
+    print("Start Model Training...")
+    print(f"Train Dataset: {request.form.get('selected_dataset')}")
+    print(f"Target Model: {request.form.get('selected_model')}")
+    
+    # 파라미터 값 가져오기
+    project = request.form.get('project', 'runs')
+    name = request.form.get('name', 'exp')
+    epochs = int(request.form.get('epochs', 100))
+    batch_size = int(request.form.get('batch_size', 16))
+    img_size = int(request.form.get('img_size', 640))
+    learning_rate = float(request.form.get('learning_rate', 0.001))
+    
     selected_dataset = "datasets/exported_datasets/" + request.form.get('selected_dataset') + '/dataset.yaml'
     selected_model = "models/" + request.form.get('selected_model')
+    log_dir = "logs/" + project + "/" + name
 
-    # 별도의 스레드에서 훈련 시작
-    training_thread = threading.Thread(target=train_yolo, args=(selected_dataset, selected_model))
+    # 별도의 스레드에서 훈련 시작 (파라미터 전달)
+    training_thread = threading.Thread(
+        target=train_yolo,
+        args=(
+            selected_dataset,
+            selected_model,
+            project,
+            name,
+            epochs,
+            batch_size,
+            img_size,
+            learning_rate
+        )
+    )
     training_thread.start()
 
-    tensorboard_thread = threading.Thread(target=tsb_runner.start)
+    tensorboard_thread = threading.Thread(
+        target=lambda: tsb_runner.start(logdir=log_dir)
+    )
     tensorboard_thread.start()
     tsb_runner.emit_event(socketio, 'tensorboard_ready', {'status': 'ready'})
 
