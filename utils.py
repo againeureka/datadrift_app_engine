@@ -40,18 +40,23 @@ class CaptureOutput(io.StringIO):
         self.output = []
 
 class TensorboardManager:
-    def __init__(self, port):
+    def __init__(self, port=6006):
         self.tensorboard_process = None
         self.port = port
+        self.process = None
+        self.current_logdir = None
 
-    def start(self):
-        # 텐서보드 프로세스가 이미 실행 중인지 확인
-        if self.tensorboard_process is None or self.tensorboard_process.poll() is not None:
-            self.tensorboard_process = subprocess.Popen(
-                ["tensorboard", "--logdir=runs/train", "--port={}".format(self.port)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+    def start(self, logdir=None):
+        if logdir:
+            self.current_logdir = logdir
+        elif not self.current_logdir:
+            self.current_logdir = "runs"  # 기본값
+
+        if self.process:
+            self.stop()
+
+        command = f"tensorboard --logdir={self.current_logdir} --port={self.port}"
+        self.process = subprocess.Popen(command.split())
 
     def emit_event(self, socketio, event_name, event_data):
         socketio.emit(event_name, event_data)
