@@ -234,7 +234,7 @@
         </div>
 
         
-        <div id="log" style="width: 100%; height: 120px; overflow-y: auto; border: 3px solid #ccc;"></div>
+        <div id="log" style="width: 100%; height: 300px; overflow-y: auto; border: 3px solid #ccc;"></div>
         <div class="download-button-container">
             <a href="/download_model" class="download-button">Model Download</a>
         </div>
@@ -264,32 +264,14 @@
                 const maxMessages = 100; // 최대 메시지 수 설정
                 let messages = [];
                 
-                // 페이지 로드 시 기존 로그 유지
-                let savedLogs = localStorage.getItem('trainingLogs');
-                if (savedLogs) {
-                    messages = savedLogs.split('<br>').filter(msg => msg.trim() !== '');
-                    if (messages.length > maxMessages) {
-                        messages = messages.slice(-maxMessages);
-                    }
-                    logElement.innerHTML = messages.join('<br>');
-                }
-                
                 eventSource.onmessage = function(event) {
-                    // 새 메시지 추가
                     messages.push(event.data);
                     
-                    // 최대 메시지 수를 초과하면 오래된 메시지 제거
                     if (messages.length > maxMessages) {
                         messages = messages.slice(-maxMessages);
                     }
                     
-                    // 화면 업데이트
                     logElement.innerHTML = messages.join('<br>');
-                    
-                    // localStorage 업데이트
-                    localStorage.setItem('trainingLogs', messages.join('<br>'));
-                    
-                    // 스크롤을 항상 아래로 유지
                     logElement.scrollTop = logElement.scrollHeight;
                 };
                 
@@ -298,7 +280,7 @@
                     eventSource.close();
                 };
             }
-            
+
             window.onload = fetchLogs;
         </script>
     </body>

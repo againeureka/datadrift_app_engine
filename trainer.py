@@ -5,8 +5,6 @@ import os
 def train_yolo(data_path, model_path, project="runs", name="exp", epochs=100, batch_size=16, img_size=640, learning_rate=0.001):
     print(f"""
     Starting YOLO training with parameters:
-    - Data path: {data_path}
-    - Model: {model_path}
     - Project: {project}
     - Name: {name}
     - Epochs: {epochs}

@@ -400,10 +400,9 @@ def train_page():
 
 @app.route('/train', methods=['POST'])
 def train():
-    print("Start Model Training...")
-    print(f"Train Dataset: {request.form.get('selected_dataset')}")
-    print(f"Target Model: {request.form.get('selected_model')}")
-    
+    print(f"Train Dataset : {request.form.get('selected_dataset')}")
+    print(f"Target Model : {request.form.get('selected_model')}")
+    print()
     # 파라미터 값 가져오기
     project = request.form.get('project', 'runs')
     name = request.form.get('name', 'exp')
@@ -449,10 +448,12 @@ def download_model():
 def stream_logs():
     def generate():
         while True:
-            line = capture_stream.get_output()
-            if line:
-                yield f"data: {line}\n\n"
-                capture_stream.clear_output() # 로그 전송 후 초기화
+            # 여러 줄의 로그를 한 번에 가져옴
+            lines = capture_stream.get_output().splitlines()
+            if lines:
+                for line in lines:
+                    yield f"data: {line}\n\n"
+                capture_stream.clear_output()  # 로그 전송 후 초기화
             time.sleep(1)  # Add a small delay to prevent high CPU usage
 
     return Response(generate(), mimetype='text/event-stream')
