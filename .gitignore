@@ -1,3 +1,6 @@
+# ignore DB
+db/
+
 # ignore libraries
 deep_text_recognition_benchmark
 
