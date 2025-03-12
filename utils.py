@@ -1,15 +1,58 @@
-import subprocess
 import fiftyone as fo
 import fiftyone.brain as fob
+from pymilvus import MilvusClient
+from pymilvus import connections, FieldSchema, CollectionSchema, DataType, Collection
+
+import clip
 import torch
 import numpy as np
-import threading
 from PIL import Image
-import clip
+
+import threading
 import io
 import sys
 import os
 from tqdm import tqdm
+import subprocess
+
+class MilvusManager:
+    def __init__(self):
+        self.client = None
+
+    def connect(self, db_file_path):
+        self.client = MilvusClient(db_file_path)
+        
+    def create_collection(self, collection_name):
+        if self.db_client.has_collection(collection_name):
+            self.db_client.drop_collection(collection_name)
+
+        schema = self.db_client.create_schema(
+            auto_id=False,
+            enable_dynamic_field=True,
+        )
+        schema.add_field(field_name="sample_id", datatype=DataType.VARCHAR, is_primary=True, max_length=24)
+        schema.add_field(field_name="embedding", datatype=DataType.FLOAT_VECTOR, dim=512)
+        index_params = self.db_client.prepare_index_params()
+        index_params.add_index(
+            field_name="embedding",
+            index_type='AUTOINDEX',
+            metric_type="COSINE",
+        )
+        self.db_client.create_collection(
+            collection_name=collection_name,
+            schema=schema,
+            index_params=index_params,
+        )
+        print(f"Collection {collection_name} created successfully {self.db_client.get_load_states(collection_name)}")
+        print(self.db_client.describe_collection(collection_name=collection_name))
+    
+    def insert(self, collection_name, data):
+        self.db_client.insert(
+            collection_name=collection_name,
+            data=data,
+        )
+        print(f"{self.db_client.get_collection_stats(collection_name)} // Entities inserted successfully.")
+        
 
 ## stdout logger class
 class CaptureOutput(io.StringIO):
@@ -102,31 +145,45 @@ class FiftyoneManager:
 
     # 임베딩 생성 함수 : 이미지, 텍스트 구분
     def get_embeddings(self, dataset, device, model, preprocess):
-
+        data = []
         for sample in tqdm(dataset, desc=f"{dataset.name} 임베딩 계산 중"):
             if "image" in sample.tags:
                 with torch.no_grad():
                     inputs = preprocess(Image.open(sample.filepath)).unsqueeze(0).to(device)
                     embedding = model.encode_image(inputs).cpu().numpy().flatten()
-                    sample['clip_embeddings'] = embedding.tolist()
-                    sample.save()
+                    tmp_dict = {
+                        "sample_id": sample.id,
+                        "embedding": embedding.tolist()
+                    }
+                    data.append(tmp_dict)
 
         # elif sample.tags[1] == "text":
         #     with torch.no_grad():
         #         inputs = clip.tokenize(sample.original_text, context_length=77, truncate=True).to(device)
         #         features = model.encode_text(inputs)
+
+        return data
     
-    def collect_image_embeddings_by_sample_id(self, dataset):
+    def collect_image_embeddings_by_sample_id(self, data, client=None):
+        embeddings_by_sample_id = {}
+        
+        if isinstance(data, list):
+            for d in tqdm(data, desc="시각화용 데이터 처리 중"):
+                embeddings_by_sample_id[d['sample_id']] = np.array(d['embedding'])
 
-        print(f"Collecting image embeddings by sample ID for {dataset.name}")
-        image_embeddings = {}
-        for sample in dataset:
-            sample_id = sample.id
-            if 'clip_embeddings' in sample:
-                # 샘플 ID를 키로, 이미지 임베딩을 값으로 저장
-                image_embeddings[sample_id] = np.array(sample['clip_embeddings'])
+        elif isinstance(data, fo.core.dataset.Dataset):
+            for sample in tqdm(data, desc="시각화용 데이터 처리 중"):
+                query_results = client.get(
+                    collection_name=data.name,
+                    ids=[sample.id],
+                    output_fields=["sample_id", "embedding"],
+                )
+                embeddings_by_sample_id[sample.id] = np.array(query_results[0]['embedding'])
 
-        return image_embeddings
+        else:
+            raise ValueError("Invalid data type")
+
+        return embeddings_by_sample_id
 
 class InputDataLoader:
     def __init__(self, data_path, data_type, data_name=None):
