@@ -27,7 +27,7 @@ import psutil
 import platform
 
 from trainer import train_yolo
-from utils import TensorboardManager, FiftyoneManager, CaptureOutput, InputDataLoader
+from utils import TensorboardManager, FiftyoneManager, CaptureOutput, InputDataLoader, MilvusManager
 
 def is_wsl():
     # WSL 확인을 위한 여러 방법 시도
@@ -98,8 +98,10 @@ def get_existing_datasets():
 def load_existing_dataset():
     dataset_name = request.form.get('saved-datasets')
     dataset = fo.load_dataset(dataset_name)
+    milvus_manager = MilvusManager()
+    milvus_manager.connect("./db/DAE_data.db")
 
-    embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(dataset)
+    embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(dataset, client=milvus_manager.client)
     results = fob.compute_visualization(
         dataset,
         embeddings=embeddings_by_sample_id,
@@ -280,8 +282,15 @@ def upload_file():
     merged_dataset.add_samples(test_dataset)
 
     print("Calculating Embeddings...")
-    fom_runner.get_embeddings(merged_dataset, device, model, preprocess)
-    embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(merged_dataset)
+    data = fom_runner.get_embeddings(merged_dataset, device, model, preprocess)
+    embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(data)
+
+    print("Inserting Embeddings to Milvus...")
+    milvus_manager = MilvusManager()
+    milvus_manager.connect("./db/DAE_data.db")
+    milvus_manager.insert(merged_dataset.name, data)
+
+    print("Computing Visualization...")
     results = fob.compute_visualization(
         merged_dataset,
         embeddings=embeddings_by_sample_id,
