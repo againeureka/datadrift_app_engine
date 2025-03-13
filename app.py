@@ -5,7 +5,7 @@ import torch
 
 import numpy as np
 
-from flask import Flask, render_template, request, redirect, url_for, Response, send_file, jsonify
+from flask import Flask, render_template, request, redirect, url_for, Response, send_file, jsonify, g
 from flask import session as flask_session
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
@@ -28,6 +28,13 @@ import platform
 
 from trainer import train_yolo
 from utils import TensorboardManager, FiftyoneManager, CaptureOutput, InputDataLoader, MilvusManager
+
+def get_milvus_manager():
+    if 'milvus_manager' not in g:
+        g.milvus_manager = MilvusManager()
+        g.milvus_manager.connect("./db/DAE_data.db")
+
+    return g.milvus_manager
 
 def is_wsl():
     # WSL 확인을 위한 여러 방법 시도
@@ -82,10 +89,12 @@ sys.stdout = capture_stream
 
 @app.route('/')
 def index():
+
     return redirect(url_for('init_data'))
 
 @app.route('/init_data')
 def init_data():
+
     return render_template('init_data.html')
 
 @app.route('/get_existing_datasets', methods=['GET'])
@@ -98,8 +107,7 @@ def get_existing_datasets():
 def load_existing_dataset():
     dataset_name = request.form.get('saved-datasets')
     dataset = fo.load_dataset(dataset_name)
-    milvus_manager = MilvusManager()
-    milvus_manager.connect("./db/DAE_data.db")
+    milvus_manager = get_milvus_manager()
 
     embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(dataset, client=milvus_manager.client)
     results = fob.compute_visualization(
@@ -275,19 +283,20 @@ def upload_file():
     model, preprocess = clip.load("ViT-B/16", device=device)
 
     print(f"Merged Dataset Name: {merged_dataset_name}")  # 디버그 출력
-    merged_dataset = fo.Dataset(merged_dataset_name)
+    merged_dataset = fo.Dataset(merged_dataset_name, persistent=True)
 
     merged_dataset.add_samples(ref_dataset)
     merged_dataset.add_samples(cur_dataset)
     merged_dataset.add_samples(test_dataset)
+    merged_dataset.save()
 
     print("Calculating Embeddings...")
     data = fom_runner.get_embeddings(merged_dataset, device, model, preprocess)
     embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(data)
 
     print("Inserting Embeddings to Milvus...")
-    milvus_manager = MilvusManager()
-    milvus_manager.connect("./db/DAE_data.db")
+    milvus_manager = get_milvus_manager()
+    milvus_manager.create_collection(merged_dataset.name)
     milvus_manager.insert(merged_dataset.name, data)
 
     print("Computing Visualization...")
