@@ -20,38 +20,42 @@ class MilvusManager:
         self.client = None
 
     def connect(self, db_file_path):
+        for alias in connections.list_connections():
+            print(f"Removed connection {alias[0]}")
+            connections.remove_connection(alias=alias[0])
+
         self.client = MilvusClient(db_file_path)
         
     def create_collection(self, collection_name):
-        if self.db_client.has_collection(collection_name):
-            self.db_client.drop_collection(collection_name)
+        if self.client.has_collection(collection_name):
+            self.client.drop_collection(collection_name)
 
-        schema = self.db_client.create_schema(
+        schema = self.client.create_schema(
             auto_id=False,
             enable_dynamic_field=True,
         )
         schema.add_field(field_name="sample_id", datatype=DataType.VARCHAR, is_primary=True, max_length=24)
         schema.add_field(field_name="embedding", datatype=DataType.FLOAT_VECTOR, dim=512)
-        index_params = self.db_client.prepare_index_params()
+        index_params = self.client.prepare_index_params()
         index_params.add_index(
             field_name="embedding",
             index_type='AUTOINDEX',
             metric_type="COSINE",
         )
-        self.db_client.create_collection(
+        self.client.create_collection(
             collection_name=collection_name,
             schema=schema,
             index_params=index_params,
         )
-        print(f"Collection {collection_name} created successfully {self.db_client.get_load_states(collection_name)}")
-        print(self.db_client.describe_collection(collection_name=collection_name))
+        print(f"Collection {collection_name} created successfully {self.client.get_load_state(collection_name)}")
+        print(self.client.describe_collection(collection_name=collection_name))
     
     def insert(self, collection_name, data):
-        self.db_client.insert(
+        self.client.insert(
             collection_name=collection_name,
             data=data,
         )
-        print(f"{self.db_client.get_collection_stats(collection_name)} // Entities inserted successfully.")
+        print(f"{self.client.get_collection_stats(collection_name)} // Entities inserted successfully.")
         
 
 ## stdout logger class
