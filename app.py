@@ -82,6 +82,7 @@ fiftyone_thread = fom_runner.start()
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app)
+app.secret_key = os.urandom(24)
 
 ## logger instance
 capture_stream = CaptureOutput()
@@ -293,6 +294,7 @@ def upload_file():
     print("Calculating Embeddings...")
     data = fom_runner.get_embeddings(merged_dataset, device, model, preprocess)
     embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(data)
+    print(f"total datas to insert : {len(data)}")
 
     print("Inserting Embeddings to Milvus...")
     milvus_manager = get_milvus_manager()
@@ -416,50 +418,59 @@ def train_page():
 
     return render_template('train_page.html', datasets=datasets, models=models)
 
-@app.route('/train', methods=['POST'])
+@app.route('/train', methods=['GET', 'POST'])
 def train():
-    print(f"Train Dataset : {request.form.get('selected_dataset')}")
-    print(f"Target Model : {request.form.get('selected_model')}")
-    print()
-    # 파라미터 값 가져오기
-    project = request.form.get('project', 'runs')
-    name = request.form.get('name', 'exp')
-    epochs = int(request.form.get('epochs', 100))
-    batch_size = int(request.form.get('batch_size', 16))
-    img_size = int(request.form.get('img_size', 640))
-    learning_rate = float(request.form.get('learning_rate', 0.001))
-    
-    selected_dataset = "datasets/exported_datasets/" + request.form.get('selected_dataset') + '/dataset.yaml'
-    selected_model = "models/" + request.form.get('selected_model')
-    log_dir = "logs/" + project + "/" + name
+    if request.method == 'POST':
+        print(f"Train Dataset : {request.form.get('selected_dataset')}")
+        print(f"Target Model : {request.form.get('selected_model')}")
+        print()
+        # 파라미터 값 가져오기
+        project = request.form.get('project', 'runs')
+        name = request.form.get('name', 'exp')
+        epochs = int(request.form.get('epochs', 100))
+        batch_size = int(request.form.get('batch_size', 16))
+        img_size = int(request.form.get('img_size', 640))
+        learning_rate = float(request.form.get('learning_rate', 0.001))
 
-    # 별도의 스레드에서 훈련 시작 (파라미터 전달)
-    training_thread = threading.Thread(
-        target=train_yolo,
-        args=(
-            selected_dataset,
-            selected_model,
-            project,
-            name,
-            epochs,
-            batch_size,
-            img_size,
-            learning_rate
+        flask_session['project'] = project
+        flask_session['run'] = name
+        
+        selected_dataset = "datasets/exported_datasets/" + request.form.get('selected_dataset') + '/dataset.yaml'
+        selected_model = "models/" + request.form.get('selected_model')
+        log_dir = "logs/" + project + "/" + name
+
+        # 별도의 스레드에서 훈련 시작 (파라미터 전달)
+        training_thread = threading.Thread(
+            target=train_yolo,
+            args=(
+                selected_dataset,
+                selected_model,
+                project,
+                name,
+                epochs,
+                batch_size,
+                img_size,
+                learning_rate
+            )
         )
-    )
-    training_thread.start()
+        training_thread.start()
 
-    tensorboard_thread = threading.Thread(
-        target=lambda: tsb_runner.start(logdir=log_dir)
-    )
-    tensorboard_thread.start()
-    tsb_runner.emit_event(socketio, 'tensorboard_ready', {'status': 'ready'})
+        tensorboard_thread = threading.Thread(
+            target=lambda: tsb_runner.start(logdir=log_dir)
+        )
+        tensorboard_thread.start()
+        tsb_runner.emit_event(socketio, 'tensorboard_ready', {'status': 'ready'})
 
-    return redirect(url_for('train_page'))
+        return render_template('train_page.html', project=project, name=name, epochs=epochs, batch_size=batch_size, img_size=img_size, learning_rate=learning_rate)
+
+    return render_template('train_page.html', project='runs', name='exp', epochs=100, batch_size=16, img_size=640, learning_rate=0.001)
 
 @app.route('/download_model')
 def download_model():
-    model_path = 'runs/train/weights/best.pt'
+    project = flask_session.get('project', 'runs')
+    run = flask_session.get('run', 'exp')
+    model_path = f'logs/{project}/{run}/weights/best.pt'
+
     return send_file(model_path, as_attachment=True)
 
 @app.route('/stream_logs')

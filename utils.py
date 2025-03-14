@@ -14,16 +14,13 @@ import sys
 import os
 from tqdm import tqdm
 import subprocess
+import time
 
 class MilvusManager:
     def __init__(self):
         self.client = None
 
     def connect(self, db_file_path):
-        for alias in connections.list_connections():
-            print(f"Removed connection {alias[0]}")
-            connections.remove_connection(alias=alias[0])
-
         self.client = MilvusClient(db_file_path)
         
     def create_collection(self, collection_name):
@@ -51,11 +48,18 @@ class MilvusManager:
         print(self.client.describe_collection(collection_name=collection_name))
     
     def insert(self, collection_name, data):
+        start_time = time.time()
+        print(f"Inserting datas to {collection_name}")
         self.client.insert(
             collection_name=collection_name,
             data=data,
         )
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        formatted_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
         print(f"{self.client.get_collection_stats(collection_name)} // Entities inserted successfully.")
+        print(f"Time taken: {formatted_time}")
         
 
 ## stdout logger class
