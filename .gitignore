@@ -10,9 +10,10 @@ deep_text_recognition_benchmark
 **/.DS_Store
 **/._.DS_Store
 
-# ignore yolo logs
+# ignore yolo logs/weights
 **/logs/
 runs/
+*.pt
 
 # ignore model files
 models/
