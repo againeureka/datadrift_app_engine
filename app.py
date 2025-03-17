@@ -110,7 +110,7 @@ def load_existing_dataset():
     dataset = fo.load_dataset(dataset_name)
     milvus_manager = get_milvus_manager()
 
-    embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(dataset, client=milvus_manager.client)
+    embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(dataset, db_client=milvus_manager)
     results = fob.compute_visualization(
         dataset,
         embeddings=embeddings_by_sample_id,
