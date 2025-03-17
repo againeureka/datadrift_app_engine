@@ -61,6 +61,14 @@ class MilvusManager:
         print(f"{self.client.get_collection_stats(collection_name)} // Entities inserted successfully.")
         print(f"Time taken: {formatted_time}")
         
+    def getdata_by_id(self, collection_name, ids):
+        query_results = self.client.get(
+            collection_name=collection_name,
+            ids=ids,
+            output_fields=["sample_id", "embedding"],
+        )
+        return query_results
+        
 
 ## stdout logger class
 class CaptureOutput(io.StringIO):
@@ -172,7 +180,7 @@ class FiftyoneManager:
 
         return data
     
-    def collect_image_embeddings_by_sample_id(self, data, client=None):
+    def collect_image_embeddings_by_sample_id(self, data, db_client=None):
         embeddings_by_sample_id = {}
         
         if isinstance(data, list):
@@ -181,16 +189,13 @@ class FiftyoneManager:
 
         elif isinstance(data, fo.core.dataset.Dataset):
             for sample in tqdm(data, desc="시각화용 데이터 처리 중"):
-                query_results = client.get(
-                    collection_name=data.name,
-                    ids=[sample.id],
-                    output_fields=["sample_id", "embedding"],
-                )
-                embeddings_by_sample_id[sample.id] = np.array(query_results[0]['embedding'])
+                results = db_client.getdata_by_id(data.name, [sample.id])
+                embeddings_by_sample_id[sample.id] = np.array(results[0]['embedding'])
 
         else:
             raise ValueError("Invalid data type")
-
+        
+        print(f"Collected {len(embeddings_by_sample_id)} embeddings")
         return embeddings_by_sample_id
 
 class InputDataLoader:
