@@ -165,11 +165,11 @@ def upload_file():
 
                     # 임시 디렉토리에 압축 해제
                     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                        contents = zip_ref.namelist()
+                        contents = [member for member in zip_ref.namelist() if not member.endswith('.DS_Store')]
                         total_size = sum(zip_ref.getinfo(member).file_size for member in contents)
                         
                         with tqdm(total=total_size, unit='B', unit_scale=True, desc=f"Extracting {file.filename}") as pbar:
-                            zip_ref.extractall(temp_dir)
+                            zip_ref.extractall(temp_dir, members=contents)
                             pbar.update(total_size)
 
                     macosx_path = os.path.join(temp_dir, '__MACOSX')
@@ -181,11 +181,22 @@ def upload_file():
                     def find_dataset_root(start_path):
                         """데이터셋의 실제 루트 디렉토리를 찾는 함수"""
                         for root, dirs, files in os.walk(start_path):
-                            if 'images' in dirs and 'labels' in dirs and 'dataset.yaml' in files:
+                            # 'dataset.yaml' 파일과 'images', 'labels' 디렉토리가 모두 있는지 확인
+                            if 'dataset.yaml' in files and 'images' in dirs and 'labels' in dirs:
                                 return root
-                            # filename/filename/images 구조 처리
-                            if 'images' in dirs and 'labels' in dirs:
+                            # 'dataset.yaml' 파일과 'train', 'valid', 'test' 디렉토리가 있는지 확인
+                            if 'dataset.yaml' in files and 'train' in dirs and 'valid' in dirs and 'test' in dirs:
                                 return root
+
+                        # filename/filename/ 구조 처리
+                        for root, dirs, files in os.walk(start_path):
+                            for dir_name in dirs:
+                                subdir_path = os.path.join(root, dir_name)
+                                subdirs = os.listdir(subdir_path)
+                                if 'dataset.yaml' in subdirs and ('images' in subdirs and 'labels' in subdirs or
+                                                                'train' in subdirs and 'valid' in subdirs and 'test' in subdirs):
+                                    return subdir_path
+
                         return None
 
                     dataset_root = find_dataset_root(temp_dir)
@@ -212,7 +223,7 @@ def upload_file():
                     shutil.rmtree(temp_dir)
                     
                     # 최종 디렉토리 구조 확인
-                    expected_paths = [
+                    expected_paths_1 = [
                         os.path.join(data_dir, 'dataset.yaml'),
                         os.path.join(data_dir, 'images', 'train'),
                         os.path.join(data_dir, 'images', 'val'),
@@ -221,10 +232,23 @@ def upload_file():
                         os.path.join(data_dir, 'labels', 'val'),
                         os.path.join(data_dir, 'labels', 'test')
                     ]
+
+                    expected_paths_2 = [
+                        os.path.join(data_dir, 'dataset.yaml'),
+                        os.path.join(data_dir, 'train', 'images'),
+                        os.path.join(data_dir, 'train', 'labels'),
+                        os.path.join(data_dir, 'valid', 'images'),
+                        os.path.join(data_dir, 'valid', 'labels'),
+                        os.path.join(data_dir, 'test', 'images'),
+                        os.path.join(data_dir, 'test', 'labels')
+                    ]
                     
-                    for path in expected_paths:
-                        if not os.path.exists(path):
-                            raise Exception(f"Expected path not found: {path}")
+                    if not any(all(os.path.exists(path) for path in expected_paths) for expected_paths in [expected_paths_1, expected_paths_2]):
+                        raise Exception(f"Expected dataset structure not found")
+                    
+                    # for path in expected_paths:
+                    #     if not os.path.exists(path):
+                    #         raise Exception(f"Expected path not found: {path}")
                     
                     print(f"Directory structure verified successfully")
 
@@ -470,6 +494,9 @@ def download_model():
     project = flask_session.get('project', 'runs')
     run = flask_session.get('run', 'exp')
     model_path = f'logs/{project}/{run}/weights/best.pt'
+    print()
+    print(f"Downloading Model : {model_path}")
+    print()
 
     return send_file(model_path, as_attachment=True)
 
