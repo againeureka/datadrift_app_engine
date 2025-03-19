@@ -4,182 +4,165 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Initialization</title>
+    <!-- Bootstrap CSS 추가 -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        .container {
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            justify-content: space-between;
-            gap: 5px;
-            margin-top: 50px;
-            margin-left: auto;
-            margin-right: auto;
-            padding: 0 5px;
-            width: 95%;
-        }
-        .upload-section {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-            font-size: 1.8em;
-        }
-        form {
-        display: flex;
-        flex-direction: row;
-        justify-content: space-between;
-        gap: 4px;
-        width: 100%;
-        }
-        /* 화면 크기에 따른 반응형 스타일 */
-        @media screen and (max-width: 1024px) {
-            .container {
-                gap: 3px;
-                padding: 0 5px;
-            }
-            .upload-section {
-                font-size: 1.4em;
-                gap: 6px;
-            }
-            button, select, input[type="text"] {
-                font-size: 1em !important;
-                padding: 5px !important;
-            }
-            input[type="file"] {
-                font-size: 0.6em;
-                width: 90%;
-            }
-            select {
-                width: 90%;
-            }
-        }
-        @media screen and (max-width: 768px) {
-            .container {
-                gap: 2px;
-            }
-            .upload-section {
-                font-size: 1.1em;
-                gap: 4px;
-            }
-            button, select, input[type="text"] {
-                font-size: 0.9em !important;
-                padding: 3px !important;
-            }
-            input[type="file"] {
-                font-size: 0.5em;
-                width: 85%;
-            }
-            select {
-                width: 85%;
-            }
-        }
         .upload-status {
-            width: 98%;
             height: 150px;
             border: 1px solid #ccc;
             padding: 10px;
             overflow-y: auto;
             font-size: 1.3em;
             color: green;
-            margin-top: 20px;
+            margin-top: 0px;
         }
         .error {
             color: red;
         }
-        .button-container {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            width: 100%;
-            margin-top: 50px;
+        .list-group {
+            border: 2px solid #000; /* 윤곽선 굵게 */
+            height: 100%; /* 높이 설정 */
         }
-        #saved-datasets {
-            margin-left: auto; /* 드롭다운을 오른쪽으로 이동 */
-            font-size: 1.5em;
-            padding: 10px;
+        .list-group-item {
+            cursor: pointer;
         }
-        button {
-            font-size: 1.5em;
-            padding: 10px;
-        }
-        input[type="file"] {
-            font-size: 0.7em;
-            padding: 10px;
-        }
-        select {
-            font-size: 0.8em; /* 드롭다운 폰트 크기 증가 */
-        }
-        form {
-            display: flex;
-            flex-direction: row;
-            justify-content: space-between;
-            gap: 4px;
-            width: 90%
+        .btn-full-height {
+            height: 100%; /* 버튼 높이 설정 */
         }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container mt-5">
+        <div class="text-center mb-5">
+            <h1>DataDrift App Engine</h1>
+        </div>
+        <h3 class="mb-4">New Data Upload</h3>
         <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
-            <div class="upload-section">
-                <label for="ref">Ref:</label>
-                <input type="file" id="ref-upload" name="ref-upload" onchange="validateFile(this)">
-                <select id="ref-format" name="ref-format">
-                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
-                    <option value="FiftyOneDataset">FiftyOneDataset</option>
-                    <option value="RawImageData">RawImageData</option>
-                </select>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card">
+                        <div class="card-header text-center">
+                            Reference Data
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label for="ref">Format:</label>
+                                <input type="file" id="ref-upload" name="ref-upload" class="form-control-file" onchange="validateFile(this)">
+                                <select id="ref-format" name="ref-format" class="form-control mt-2">
+                                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                                    <option value="RawImageData">RawImageData</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card">
+                        <div class="card-header text-center">
+                            Current Data
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label for="cur">Format:</label>
+                                <input type="file" id="cur-upload" name="cur-upload" class="form-control-file" onchange="validateFile(this)">
+                                <select id="cur-format" name="cur-format" class="form-control mt-2">
+                                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                                    <option value="RawImageData">RawImageData</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card">
+                        <div class="card-header text-center">
+                            Predict Data
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label for="test">Format:</label>
+                                <input type="file" id="test-upload" name="test-upload" class="form-control-file" onchange="validateFile(this)">
+                                <select id="test-format" name="test-format" class="form-control mt-2">
+                                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
+                                    <option value="FiftyOneDataset">FiftyOneDataset</option>
+                                    <option value="RawImageData">RawImageData</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="upload-section">
-                <label for="cur">Cur:</label>
-                <input type="file" id="cur-upload" name="cur-upload" onchange="validateFile(this)">
-                <select id="cur-format" name="cur-format">
-                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
-                    <option value="FiftyOneDataset">FiftyOneDataset</option>
-                    <option value="RawImageData">RawImageData</option>
-                </select>
+            <div class="row mt-4">
+                <div class="col-md-8">
+                    <div id="status-log" class="upload-status"></div>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-row">
+                        <div class="col-12">
+                            <input type="text" id="merged-dataset-name" name="merged-dataset-name" placeholder="Enter merged dataset name" class="form-control mb-3">
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-primary mb-3 btn-block" onclick="submitForm()">Process & Load Dataset</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="upload-section">
-                <label for="test">Pred:</label>
-                <input type="file" id="test-upload" name="test-upload" onchange="validateFile(this)">
-                <select id="test-format" name="test-format">
-                    <option value="YOLOv5Dataset">YOLOv5Dataset</option>
-                    <option value="FiftyOneDataset">FiftyOneDataset</option>
-                    <option value="RawImageData">RawImageData</option>
-                </select>
-            </div>
-        </div>
-        <div id="status-log" class="upload-status"></div>
-        <div class="button-container">
-            <input type="text" id="merged-dataset-name" name="merged-dataset-name" placeholder="Enter merged dataset name" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">
-            <button type="button" onclick="submitForm()">Process & Load Dataset</button>
         </form>
-        </div>
-    <div class="button-container">
-        <form id="exist-dataset-form" action="/load_existing_dataset" method="post">
-            <select id="saved-datasets" name="saved-datasets" style="font-size: 1.5em; padding: 10px; margin-right: 10px;">
-                <option value="">Select a saved dataset</option>
-            </select>
-            <button type="submit">Load Existing Dataset</button>
+        <h3 class="mt-5" style="margin-bottom: 24px;">Built Dataset List</h3>
+        <form id="load-dataset-form" action="/load_existing_dataset" method="post">
+            <div class="form-group">
+                <div class="row">
+                    <div class="col-md-9">
+                        <div id="dataset-list" class="list-group mb-3">
+                            <!-- JavaScript로 데이터셋 목록이 여기에 추가됩니다 -->
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-stretch">
+                        <button type="button" class="btn btn-secondary btn-block btn-full-height" onclick="submitLoadForm()">Load Selected Dataset</button>
+                    </div>
+                </div>
+                <input type="hidden" id="selected-dataset" name="saved-datasets">
+            </div>
         </form>
     </div>
 
+    <!-- Bootstrap JS 및 jQuery 추가 -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             fetch('/get_existing_datasets')
                 .then(response => response.json())
                 .then(datasets => {
-                    const dropdown = document.getElementById('saved-datasets');
+                    const listGroup = document.getElementById('dataset-list');
                     datasets.forEach(dataset => {
-                        const option = document.createElement('option');
-                        option.value = dataset;
-                        option.textContent = dataset;
-                        dropdown.appendChild(option);
+                        const item = document.createElement('button');
+                        item.type = 'button';
+                        item.className = 'list-group-item list-group-item-action';
+                        item.textContent = dataset;
+                        item.onclick = function() {
+                            document.querySelectorAll('.list-group-item').forEach(el => el.classList.remove('active'));
+                            item.classList.add('active');
+                            document.getElementById('selected-dataset').value = dataset;
+                        };
+                        listGroup.appendChild(item);
                     });
                 })
                 .catch(error => console.error('Error fetching datasets:', error));
         });
-        
+
+        function submitLoadForm() {
+            const selected = document.querySelector('.list-group-item.active');
+            if (selected) {
+                document.getElementById('load-dataset-form').submit();
+            } else {
+                alert('Please select a dataset to load.');
+            }
+        }
+
         function submitForm() {
             document.getElementById('upload-form').submit();
         }
