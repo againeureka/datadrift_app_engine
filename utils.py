@@ -21,10 +21,18 @@ class MilvusManager:
         self.client = None
 
     def connect(self, db_file_path):
-        self.client = MilvusClient(db_file_path)
+        print(f"Connecting to {db_file_path}")
+        if not os.path.exists("db"):
+            print(f"Creating New Database : {db_file_path}")
+            os.makedirs("db")
+            self.client = MilvusClient(db_file_path)
+        else:
+            print(f"Connecting to Existing Database : db/{db_file_path}")
+            self.client = MilvusClient(os.path.join("db", db_file_path))
         
     def create_collection(self, collection_name):
         if self.client.has_collection(collection_name):
+            print(f"Dropping existing collection {collection_name}")
             self.client.drop_collection(collection_name)
 
         schema = self.client.create_schema(
@@ -46,6 +54,12 @@ class MilvusManager:
         )
         print(f"Collection {collection_name} created successfully {self.client.get_load_state(collection_name)}")
         print(self.client.describe_collection(collection_name=collection_name))
+
+    def has_collection(self, collection_name):
+        return self.client.has_collection(collection_name)
+    
+    def drop_collection(self, collection_name):
+        self.client.drop_collection(collection_name)
     
     def insert(self, collection_name, data):
         start_time = time.time()
