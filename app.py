@@ -29,10 +29,10 @@ import platform
 from trainer import train_yolo
 from utils import TensorboardManager, FiftyoneManager, CaptureOutput, InputDataLoader, MilvusManager
 
-def get_milvus_manager():
+def get_milvus_manager(db_path):
     if 'milvus_manager' not in g:
         g.milvus_manager = MilvusManager()
-        g.milvus_manager.connect("./db/DAE_data.db")
+        g.milvus_manager.connect(db_path)
 
     return g.milvus_manager
 
@@ -67,7 +67,8 @@ parser = argparse.ArgumentParser()
 
 # parser.add_argument("--dataset_dir", type=str, required=True, help="Importing dataset path")
 # parser.add_argument("--dataset_name", type=str, default="imported_dataset", help="Name the dataset you are importing")
-parser.add_argument("--port", type=int, default=5151, help="Port to run the FiftyOne app on")
+parser.add_argument("--port", type=int, default=8159, help="Port to run the FiftyOne app on")
+parser.add_argument("--db_path", type=str, default="DAE_data.db", help="Path to the Milvus database")
 # parser.add_argument("--dataset_type", type=str, default=None, help="dataset type (51, yolo)")
 
 args = parser.parse_args()
@@ -108,7 +109,7 @@ def get_existing_datasets():
 def load_existing_dataset():
     dataset_name = request.form.get('saved-datasets')
     dataset = fo.load_dataset(dataset_name)
-    milvus_manager = get_milvus_manager()
+    milvus_manager = get_milvus_manager(args.db_path)
 
     embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(dataset, db_client=milvus_manager)
     results = fob.compute_visualization(
@@ -122,9 +123,31 @@ def load_existing_dataset():
 
     return redirect(url_for('dataclinic', fiftyone_port_number=fom_runner.port))
 
+@app.route('/delete_dataset', methods=['POST'])
+def delete_dataset():
+    data = request.get_json()
+    dataset_name = data.get('dataset_name')
+    status_log = []
+    milvus_manager = get_milvus_manager(args.db_path)
+
+    try:
+        if fo.dataset_exists(dataset_name) and milvus_manager.has_collection(dataset_name):
+            fo.delete_dataset(dataset_name)
+            status_log.append(f"Deleted FiftyOne dataset: {dataset_name}")
+            milvus_manager.drop_collection(dataset_name)
+            status_log.append(f"Deleted Milvus collection: {dataset_name}")
+
+        return jsonify({'message': " ".join(status_log)})
+    
+    except Exception as e:    
+        return jsonify({'message': f"Error deleting dataset: {str(e)}"}), 500
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     UPLOAD_FOLDER = './datasets/uploads'
+    ref_dataset = None
+    cur_dataset = None
+    test_dataset = None
 
     print("Starting file upload process...")
     for key in request.files:
@@ -303,38 +326,53 @@ def upload_file():
         print(f"Deleting existing dataset: {merged_dataset_name}")
         fo.delete_dataset(merged_dataset_name)
 
-    print("Loading Embedding Model...")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, preprocess = clip.load("ViT-B/16", device=device)
-
     print(f"Merged Dataset Name: {merged_dataset_name}")  # 디버그 출력
     merged_dataset = fo.Dataset(merged_dataset_name, persistent=True)
-
-    merged_dataset.add_samples(ref_dataset)
-    merged_dataset.add_samples(cur_dataset)
-    merged_dataset.add_samples(test_dataset)
+    
+    # 분기 처리
+    if ref_dataset and not cur_dataset and not test_dataset:
+        merged_dataset.add_samples(ref_dataset)
+    elif ref_dataset and cur_dataset and not test_dataset:
+        merged_dataset.add_samples(ref_dataset)
+        merged_dataset.add_samples(cur_dataset)
+    elif ref_dataset and cur_dataset and test_dataset:
+        merged_dataset.add_samples(ref_dataset)
+        merged_dataset.add_samples(cur_dataset)
+        merged_dataset.add_samples(test_dataset)
+    
     merged_dataset.save()
 
-    print("Calculating Embeddings...")
-    data = fom_runner.get_embeddings(merged_dataset, device, model, preprocess)
-    embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(data)
-    print(f"total datas to insert : {len(data)}")
+    print("Deleting Temporary Datasets...")
+    # 개별 데이터셋 삭제
+    if ref_dataset:
+        fo.delete_dataset(ref_dataset.name)
+    if cur_dataset:
+        fo.delete_dataset(cur_dataset.name)
+    if test_dataset:
+        fo.delete_dataset(test_dataset.name)
 
-    print("Inserting Embeddings to Milvus...")
-    milvus_manager = get_milvus_manager()
-    milvus_manager.create_collection(merged_dataset.name)
-    milvus_manager.insert(merged_dataset.name, data)
+    if merged_dataset:
+        print("Calculating Embeddings...")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model, preprocess = clip.load("ViT-B/16", device=device)
+        data = fom_runner.get_embeddings(merged_dataset, device, model, preprocess)
+        embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(data)
+        print(f"total datas to insert : {len(data)}")
 
-    print("Computing Visualization...")
-    results = fob.compute_visualization(
-        merged_dataset,
-        embeddings=embeddings_by_sample_id,
-        brain_key="clip_embeddings",
-        plot_points=True,
-        verbose=True,
-    )
+        print("Inserting Embeddings to Milvus...")
+        milvus_manager = get_milvus_manager(args.db_path)
+        milvus_manager.create_collection(merged_dataset.name)
+        milvus_manager.insert(merged_dataset.name, data)
 
-    fom_runner.set_dataset(merged_dataset, results)
+        print("Computing Visualization...")
+        results = fob.compute_visualization(
+            merged_dataset,
+            embeddings=embeddings_by_sample_id,
+            brain_key="clip_embeddings",
+            plot_points=True,
+            verbose=True,
+        )
+        fom_runner.set_dataset(merged_dataset, results)
     
     if fom_runner.session.dataset:
         print("Successfully processed all datasets. Starting FiftyOne Visualization...")  # 디버그 출력

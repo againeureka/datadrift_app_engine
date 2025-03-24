@@ -119,8 +119,9 @@
                             <!-- JavaScript로 데이터셋 목록이 여기에 추가됩니다 -->
                         </div>
                     </div>
-                    <div class="col-md-3 d-flex align-items-stretch">
-                        <button type="button" class="btn btn-secondary btn-block btn-full-height" onclick="submitLoadForm()">Load Selected Dataset</button>
+                    <div class="col-md-3 d-flex flex-column">
+                        <button type="button" class="btn btn-secondary btn-block flex-grow-1" onclick="submitLoadForm()">Load Selected Dataset</button>
+                        <button type="button" class="btn btn-danger btn-block flex-grow-1" onclick="deleteDataset()">Delete Selected Dataset</button>
                     </div>
                 </div>
                 <input type="hidden" id="selected-dataset" name="saved-datasets">
@@ -179,6 +180,28 @@
                 statusLog.innerHTML += `<div>${message}</div>`;
             }
             statusLog.scrollTop = statusLog.scrollHeight; // 스크롤을 맨 아래로 이동
+        }
+
+        function deleteDataset() {
+            const selected = document.querySelector('.list-group-item.active');
+            if (selected) {
+                const datasetName = document.getElementById('selected-dataset').value;
+                fetch(`/delete_dataset`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ dataset_name: datasetName })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('status-log').innerHTML += `<div>${data.message}</div>`;
+                    selected.remove(); // 목록에서 삭제
+                })
+                .catch(error => console.error('Error deleting dataset:', error));
+            } else {
+                alert('Please select a dataset to delete.');
+            }
         }
     </script>
 </body>
