@@ -195,7 +195,7 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('status-log').innerHTML += `<div>${data.message}</div>`;
+                    document.getElementById('status-log').innerHTML += `<div>${data.message.replace(/\n/g, "<br>")}</div>`;
                     selected.remove(); // 목록에서 삭제
                 })
                 .catch(error => console.error('Error deleting dataset:', error));
