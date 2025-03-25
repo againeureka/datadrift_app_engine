@@ -137,7 +137,7 @@ def delete_dataset():
             milvus_manager.drop_collection(dataset_name)
             status_log.append(f"Deleted Milvus collection: {dataset_name}")
 
-        return jsonify({'message': " ".join(status_log)})
+        return jsonify({'message': "\n".join(status_log)})
     
     except Exception as e:    
         return jsonify({'message': f"Error deleting dataset: {str(e)}"}), 500
