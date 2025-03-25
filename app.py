@@ -125,22 +125,56 @@ def load_existing_dataset():
 
 @app.route('/delete_dataset', methods=['POST'])
 def delete_dataset():
-    data = request.get_json()
-    dataset_name = data.get('dataset_name')
-    status_log = []
-    milvus_manager = get_milvus_manager(args.db_path)
-
     try:
-        if fo.dataset_exists(dataset_name) and milvus_manager.has_collection(dataset_name):
-            fo.delete_dataset(dataset_name)
-            status_log.append(f"Deleted FiftyOne dataset: {dataset_name}")
-            milvus_manager.drop_collection(dataset_name)
-            status_log.append(f"Deleted Milvus collection: {dataset_name}")
+        data = request.get_json()
+        if not data:
+            raise ValueError("No JSON data received")
+            
+        dataset_name = data.get('dataset_name')
+        if not dataset_name:
+            raise ValueError("No dataset_name provided in request")
+            
+        print(f"Attempting to delete dataset: {dataset_name}")
+        status_log = []
+        
+        try:
+            milvus_manager = get_milvus_manager(args.db_path)
+        except Exception as e:
+            raise Exception(f"Failed to connect to Milvus: {str(e)}")
 
-        return jsonify({'message': "\n".join(status_log)})
+        try:
+            if fo.dataset_exists(dataset_name):
+                print(f"Found FiftyOne dataset: {dataset_name}")
+                fo.delete_dataset(dataset_name)
+                status_log.append(f"Deleted FiftyOne dataset: {dataset_name}")
+                print(f"Deleted FiftyOne dataset: {dataset_name}")
+            else:
+                print(f"FiftyOne dataset not found: {dataset_name}")
+
+            if milvus_manager.has_collection(dataset_name):
+                print(f"Found Milvus collection: {dataset_name}")
+                milvus_manager.drop_collection(dataset_name)
+                status_log.append(f"Deleted Milvus collection: {dataset_name}")
+                print(f"Deleted Milvus collection: {dataset_name}")
+            else:
+                print(f"Milvus collection not found: {dataset_name}")
+
+            if not status_log:
+                return jsonify({'message': f"No datasets or collections found to delete: {dataset_name}"}), 404
+
+            return jsonify({'message': "\n".join(status_log)})
+            
+        except Exception as e:
+            raise Exception(f"Error during dataset/collection deletion: {str(e)}")
     
-    except Exception as e:    
-        return jsonify({'message': f"Error deleting dataset: {str(e)}"}), 500
+    except ValueError as e:
+        error_msg = f"Invalid request: {str(e)}"
+        print(error_msg)
+        return jsonify({'message': error_msg}), 400
+    except Exception as e:
+        error_msg = f"Error deleting dataset: {str(e)}"
+        print(error_msg)
+        return jsonify({'message': error_msg}), 500
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
