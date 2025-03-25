@@ -25,7 +25,7 @@ class MilvusManager:
         if not os.path.exists("db"):
             print(f"Creating New Database : {db_file_path}")
             os.makedirs("db")
-            self.client = MilvusClient(db_file_path)
+            self.client = MilvusClient(os.path.join("db", db_file_path))
         else:
             print(f"Connecting to Existing Database : db/{db_file_path}")
             self.client = MilvusClient(os.path.join("db", db_file_path))
