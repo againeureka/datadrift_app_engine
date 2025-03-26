@@ -284,10 +284,8 @@ def upload_file():
                         os.path.join(data_dir, 'dataset.yaml'),
                         os.path.join(data_dir, 'images', 'train'),
                         os.path.join(data_dir, 'images', 'val'),
-                        os.path.join(data_dir, 'images', 'test'),
                         os.path.join(data_dir, 'labels', 'train'),
-                        os.path.join(data_dir, 'labels', 'val'),
-                        os.path.join(data_dir, 'labels', 'test')
+                        os.path.join(data_dir, 'labels', 'val')
                     ]
 
                     expected_paths_2 = [
@@ -295,17 +293,32 @@ def upload_file():
                         os.path.join(data_dir, 'train', 'images'),
                         os.path.join(data_dir, 'train', 'labels'),
                         os.path.join(data_dir, 'valid', 'images'),
-                        os.path.join(data_dir, 'valid', 'labels'),
+                        os.path.join(data_dir, 'valid', 'labels')
+                    ]
+
+                    # test 디렉토리 경로 추가 (있는 경우에만)
+                    test_paths_1 = [
+                        os.path.join(data_dir, 'images', 'test'),
+                        os.path.join(data_dir, 'labels', 'test')
+                    ]
+                    test_paths_2 = [
                         os.path.join(data_dir, 'test', 'images'),
                         os.path.join(data_dir, 'test', 'labels')
                     ]
-                    
+
+                    # 기본 구조 확인
                     if not any(all(os.path.exists(path) for path in expected_paths) for expected_paths in [expected_paths_1, expected_paths_2]):
                         raise Exception(f"Expected dataset structure not found")
-                    
-                    # for path in expected_paths:
-                    #     if not os.path.exists(path):
-                    #         raise Exception(f"Expected path not found: {path}")
+
+                    # test 디렉토리 확인 (있는 경우에만)
+                    if any(os.path.exists(path) for path in test_paths_1):
+                        missing_paths = [path for path in test_paths_1 if not os.path.exists(path)]
+                        if missing_paths:
+                            raise Exception(f"Test directory structure is incomplete. Missing: {', '.join(missing_paths)}")
+                    elif any(os.path.exists(path) for path in test_paths_2):
+                        missing_paths = [path for path in test_paths_2 if not os.path.exists(path)]
+                        if missing_paths:
+                            raise Exception(f"Test directory structure is incomplete. Missing: {', '.join(missing_paths)}")
                     
                     print(f"Directory structure verified successfully")
 
@@ -364,17 +377,39 @@ def upload_file():
     merged_dataset = fo.Dataset(merged_dataset_name, persistent=True)
     
     # 분기 처리
+    print("\n=== Dataset Merge Debug Info ===")
+    print(f"ref_dataset exists: {ref_dataset is not None}")
+    print(f"cur_dataset exists: {cur_dataset is not None}")
+    print(f"test_dataset exists: {test_dataset is not None}")
+    
     if ref_dataset and not cur_dataset and not test_dataset:
+        print(f"Case 1: Adding only Ref Dataset... {ref_dataset.name}")
+        print(f"Ref dataset sample count: {len(ref_dataset)}")
         merged_dataset.add_samples(ref_dataset)
     elif ref_dataset and cur_dataset and not test_dataset:
+        print(f"Case 2: Adding Ref and Cur Datasets...")
+        print(f"Ref dataset: {ref_dataset.name}, sample count: {len(ref_dataset)}")
+        print(f"Cur dataset: {cur_dataset.name}, sample count: {len(cur_dataset)}")
         merged_dataset.add_samples(ref_dataset)
         merged_dataset.add_samples(cur_dataset)
     elif ref_dataset and cur_dataset and test_dataset:
+        print(f"Case 3: Adding Ref, Cur, and Test Datasets...")
+        print(f"Ref dataset: {ref_dataset.name}, sample count: {len(ref_dataset)}")
+        print(f"Cur dataset: {cur_dataset.name}, sample count: {len(cur_dataset)}")
+        print(f"Test dataset: {test_dataset.name}, sample count: {len(test_dataset)}")
         merged_dataset.add_samples(ref_dataset)
         merged_dataset.add_samples(cur_dataset)
         merged_dataset.add_samples(test_dataset)
+    else:
+        print("No valid dataset combination found")
+        print("Current state:")
+        print(f"- ref_dataset: {ref_dataset.name if ref_dataset else 'None'}")
+        print(f"- cur_dataset: {cur_dataset.name if cur_dataset else 'None'}")
+        print(f"- test_dataset: {test_dataset.name if test_dataset else 'None'}")
     
+    print(f"\nFinal merged dataset sample count: {len(merged_dataset)}")
     merged_dataset.save()
+    print("=== End Dataset Merge Debug Info ===\n")
 
     print("Deleting Temporary Datasets...")
     # 개별 데이터셋 삭제
@@ -386,19 +421,25 @@ def upload_file():
         fo.delete_dataset(test_dataset.name)
 
     if merged_dataset:
-        print("Calculating Embeddings...")
+        print("\n=== Starting Embedding and Visualization Process ===")
+        print(f"Dataset name: {merged_dataset.name}")
+        print(f"Dataset size: {len(merged_dataset)}")
+        
+        print("\nCalculating Embeddings...")
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {device}")
         model, preprocess = clip.load("ViT-B/16", device=device)
         data = fom_runner.get_embeddings(merged_dataset, device, model, preprocess)
         embeddings_by_sample_id = fom_runner.collect_image_embeddings_by_sample_id(data)
-        print(f"total datas to insert : {len(data)}")
+        print(f"Total embeddings to insert: {len(data)}")
 
-        print("Inserting Embeddings to Milvus...")
+        print("\nInserting Embeddings to Milvus...")
         milvus_manager = get_milvus_manager(args.db_path)
         milvus_manager.create_collection(merged_dataset.name)
         milvus_manager.insert(merged_dataset.name, data)
+        print(f"Successfully inserted embeddings to Milvus collection: {merged_dataset.name}")
 
-        print("Computing Visualization...")
+        print("\nComputing Visualization...")
         results = fob.compute_visualization(
             merged_dataset,
             embeddings=embeddings_by_sample_id,
@@ -407,7 +448,14 @@ def upload_file():
             verbose=True,
         )
         fom_runner.set_dataset(merged_dataset, results)
-    
+        print("=== Completed Embedding and Visualization Process ===\n")
+    else:
+        print("\n=== Error: No Valid Dataset for Processing ===")
+        print("merged_dataset is None or empty")
+        print(f"Dataset name: {merged_dataset_name}")
+        print(f"Dataset exists: {fo.dataset_exists(merged_dataset_name)}")
+        print("=== End Error Report ===\n")
+
     if fom_runner.session.dataset:
         print("Successfully processed all datasets. Starting FiftyOne Visualization...")  # 디버그 출력
         # /dataclinic 페이지로 리다이렉트하며 데이터 전달

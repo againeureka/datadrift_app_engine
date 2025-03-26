@@ -231,19 +231,51 @@ class InputDataLoader:
             self.dataset.tags.append(self.data_type)
 
         elif self.data_type == "YOLOv5Dataset":
-            splits = ['train', 'val', 'test']
             self.dataset = fo.Dataset(self.data)
+            
+            # 두 가지 가능한 구조 확인
+            structure_1 = os.path.exists(os.path.join(self.data_path, 'images'))  # images/split/
+            structure_2 = os.path.exists(os.path.join(self.data_path, 'train'))   # split/images/
 
-            for split in splits:
-                try:
-                    self.dataset.add_dir(
-                        dataset_dir=self.data_path,
-                        dataset_type=fo.types.YOLOv5Dataset,
-                        split=split,
-                        tags=split,
-                    )
-                except Exception as e:
-                    print(f"Error adding {split} dataset: {e}")
+            if structure_1:
+                print("Detected structure: images/split/")
+                # images 디렉토리 내의 split 확인
+                available_splits = [d for d in os.listdir(os.path.join(self.data_path, 'images')) 
+                                  if os.path.isdir(os.path.join(self.data_path, 'images', d))]
+                print(f"Available splits: {available_splits}")
+                
+                for split in available_splits:
+                    try:
+                        print(f"Adding {split} dataset to {self.dataset.name}")
+                        self.dataset.add_dir(
+                            dataset_dir=self.data_path,
+                            dataset_type=fo.types.YOLOv5Dataset,
+                            split=split,
+                            tags=split,
+                        )
+                    except Exception as e:
+                        print(f"Error adding {split} dataset: {e}")
+
+            elif structure_2:
+                print("Detected structure: split/images/")
+                # 루트 디렉토리 내의 split 확인
+                available_splits = [d for d in os.listdir(self.data_path) 
+                                  if os.path.isdir(os.path.join(self.data_path, d))]
+                print(f"Available splits: {available_splits}")
+                
+                for split in available_splits:
+                    try:
+                        print(f"Adding {split} dataset to {self.dataset.name}")
+                        self.dataset.add_dir(
+                            dataset_dir=self.data_path,
+                            dataset_type=fo.types.YOLOv5Dataset,
+                            split=split,
+                            tags=split,
+                        )
+                    except Exception as e:
+                        print(f"Error adding {split} dataset: {e}")
+            else:
+                raise Exception("Could not detect valid YOLOv5 dataset structure. Expected either 'images/split/' or 'split/images/'")
                 
             self.dataset.tags.append(self.data_type)
         
