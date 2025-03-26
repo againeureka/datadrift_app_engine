@@ -75,6 +75,7 @@ jupyter_core==5.7.2
 kaleido==0.2.1
 kiwisolver==1.4.8
 lazy_loader==0.4
+llvmlite==0.44.0
 MarkupSafe==3.0.2
 matplotlib==3.10.1
 matplotlib-inline==0.1.7
@@ -87,6 +88,7 @@ narwhals==1.32.0
 nbformat==5.10.4
 nest-asyncio==1.6.0
 networkx==3.4.2
+numba==0.61.0
 numpy==2.1.1
 nvidia-cublas-cu12==12.4.5.8
 nvidia-cuda-cupti-cu12==12.4.127
@@ -130,6 +132,7 @@ pydash==8.0.5
 Pygments==2.19.1
 pymilvus==2.5.6
 pymongo==4.9.2
+pynndescent==0.5.13
 pyparsing==3.2.3
 pyppmd==1.1.1
 pytest==8.3.5
@@ -196,6 +199,7 @@ tzlocal==5.3.1
 ujson==5.10.0
 ultralytics==8.3.96
 ultralytics-thop==2.0.14
+umap-learn==0.5.7
 universal-analytics-python3==1.1.1
 urllib3==2.3.0
 voxel51-eta==0.14.0
