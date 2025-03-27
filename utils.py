@@ -241,11 +241,14 @@ class InputDataLoader:
                 print("Detected structure: images/split/")
                 # images 디렉토리 내의 split 확인
                 available_splits = [d for d in os.listdir(os.path.join(self.data_path, 'images')) 
-                                  if os.path.isdir(os.path.join(self.data_path, 'images', d))]
+                                    if os.path.isdir(os.path.join(self.data_path, 'images', d))]
                 print(f"Available splits: {available_splits}")
                 
                 for split in available_splits:
                     try:
+                        # "valid" 또는 "val"을 동일하게 처리
+                        if split in ["valid", "val"]:
+                            split = "val"
                         print(f"Adding {split} dataset to {self.dataset.name}")
                         self.dataset.add_dir(
                             dataset_dir=self.data_path,
@@ -260,11 +263,14 @@ class InputDataLoader:
                 print("Detected structure: split/images/")
                 # 루트 디렉토리 내의 split 확인
                 available_splits = [d for d in os.listdir(self.data_path) 
-                                  if os.path.isdir(os.path.join(self.data_path, d))]
+                                    if os.path.isdir(os.path.join(self.data_path, d))]
                 print(f"Available splits: {available_splits}")
                 
                 for split in available_splits:
                     try:
+                        # "valid" 또는 "val"을 동일하게 처리
+                        if split in ["valid", "val"]:
+                            split = "val"
                         print(f"Adding {split} dataset to {self.dataset.name}")
                         self.dataset.add_dir(
                             dataset_dir=self.data_path,
