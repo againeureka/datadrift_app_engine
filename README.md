@@ -21,8 +21,8 @@
 git clone $GITHUB_URL
 
 # Create conda env
-conda create -n daetp python==3.12.5
-conda activate daetp
+conda create -n $ENV_NAME python==3.12.5
+conda activate $ENV_NAME
 
 # Install packages
 cd $GITHUB_DIR
