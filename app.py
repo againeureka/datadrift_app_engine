@@ -504,6 +504,11 @@ def export_selected_view():
     if selected_view and selected_format:
         print(f"Exporting View: {selected_view}")
         view = fom_runner.session.dataset.load_saved_view(selected_view)
+
+        if len(view) <= 4:
+            print("Error: The selected view contains 4 or fewer samples.")
+            return jsonify({'error': 'The selected view contains 4 or fewer samples. Please select a view with more samples.'}), 400
+
         view_export_dir = f"./datasets/exported_datasets/{fom_runner.session.dataset.name}_{selected_view}"
         label_field = "ground_truth"
 

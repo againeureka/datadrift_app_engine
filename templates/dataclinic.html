@@ -43,7 +43,7 @@
             <div class="col-md-8">
                 <div class="dropdown-container card mb-4">
                     <div class="card-body">
-                        <form action="/export" method="post">
+                        <form id="exportForm" action="/export" method="post">
                             <div class="form-group">
                                 <label for="views">뷰 선택:</label>
                                 <select id="views" name="selected_view" class="form-control mb-3">
@@ -94,6 +94,28 @@
                 }
             });
             checkFiftyOneReady();
+
+            // 폼 제출 처리
+            const form = document.getElementById('exportForm');
+            form.addEventListener('submit', function(event) {
+                event.preventDefault(); // 폼의 기본 제출 동작을 막음
+
+                const formData = new FormData(form);
+                fetch('/export', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error); // 에러 메시지를 알림창으로 표시
+                    } else {
+                        alert(data.success); // 성공 메시지를 알림창으로 표시
+                        window.location.href = '/dataclinic'; // 성공 시 리다이렉트
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
         });
     </script>
 </body>
