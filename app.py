@@ -561,6 +561,16 @@ def train_page():
     # Models directory
     models_dir = './models/'
 
+    # exported_datasets 디렉토리가 없으면 생성
+    if not os.path.exists(export_dir):
+        print(f"Exported datasets directory not found. Creating directory: {export_dir}")
+        os.makedirs(export_dir)
+
+    # models 디렉토리가 없으면 생성
+    if not os.path.exists(models_dir):
+        print(f"Models directory not found. Creating directory: {models_dir}")
+        os.makedirs(models_dir)
+
     # 데이터셋과 모델의 경로를 저장
     datasets = [d for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))]
     models = [m for m in os.listdir(models_dir) if os.path.isfile(os.path.join(models_dir, m))]
